@@ -10,8 +10,10 @@ type Player = {
   shortName?: string;
   firstName?: string;
   lastName?: string;
-  currentTeam?: { name?: string };
+  currentTeam?: { name?: string; wyId?: number; id?: number };
   role?: { name?: string };
+  imageDataURL?: string;
+  teamImageDataURL?: string;
   [key: string]: unknown;
 };
 
@@ -50,13 +52,108 @@ type Fixture = {
   gameweekMatches?: GameweekMatch[];
   roundMatches?: GameweekMatch[];
   seasonMatches?: GameweekMatch[];
+  playerNames?: string[];
+  playersInMatch?: Player[];
   [key: string]: unknown;
+};
+
+/** Remove trailing ", 0-0" (or any score) from match label */
+function stripScoreFromLabel(label: string): string {
+  return label.replace(/,\s*\d+-\d+\s*$/, "").trim();
+}
+
+function escapeCsvCell(val: string): string {
+  const s = String(val ?? "").trim();
+  if (s.includes('"') || s.includes(",") || s.includes("\n") || s.includes("\r")) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+function fixturesToCsv(fixtures: Fixture[]): string {
+  const header = [
+    "Giocatore",
+    "Data",
+    "Label",
+    "Area / Competizione / Stagione / Round",
+    "Gameweek",
+    "Gameweek inizio",
+    "Gameweek fine",
+    "Match ID",
+  ];
+  const rows = fixtures.map((f) => {
+    const dateStr = f.date ?? f.dateutc ?? "";
+    const dateFormatted = dateStr
+      ? new Date(dateStr).toLocaleDateString("it-IT")
+      : "";
+    const labelRaw =
+      f.label ??
+      (f.homeTeam?.name && f.awayTeam?.name
+        ? `${f.homeTeam.name} – ${f.awayTeam.name}`
+        : f.homeTeamId && f.awayTeamId
+          ? `Team ${f.homeTeamId} – Team ${f.awayTeamId}`
+          : "");
+    const label = stripScoreFromLabel(String(labelRaw ?? ""));
+    const area = f.areaName ?? f.competition?.area?.name ?? "";
+    const comp = f.competitionName ?? f.competition?.name ?? "";
+    const season = f.seasonName ?? f.season?.name ?? "";
+    const roundLabel =
+      f.roundName ??
+      (typeof f.round === "object" && f.round?.name
+        ? f.round.name
+        : typeof f.round === "number"
+          ? String(f.round)
+          : f.round ?? "");
+    const parts = [area, comp, season, roundLabel].filter(Boolean);
+    const gameweek = f.gameweek != null ? String(f.gameweek) : "";
+    const gwStart = f.gameweekStartDate
+      ? new Date(f.gameweekStartDate).toLocaleDateString("it-IT")
+      : "";
+    const gwEnd = f.gameweekEndDate
+      ? new Date(f.gameweekEndDate).toLocaleDateString("it-IT")
+      : "";
+    return [
+      (f.playerNames ?? []).join("; "),
+      dateFormatted,
+      label,
+      parts.join(" / "),
+      gameweek,
+      gwStart,
+      gwEnd,
+      String(f.matchId ?? f.wyId ?? ""),
+    ].map(escapeCsvCell);
+  });
+  return [header.map(escapeCsvCell).join(","), ...rows.map((r) => r.join(","))].join("\n");
+}
+
+function downloadCsv(csv: string, filename: string) {
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function playerImageUrl(p: Player): string | null {
+  const url = p.imageDataURL;
+  return url && typeof url === "string" ? url : null;
+}
+function teamImageUrl(p: Player): string | null {
+  const url = p.teamImageDataURL;
+  return url && typeof url === "string" ? url : null;
+}
+const defaultDateFrom = () => new Date().toISOString().slice(0, 10);
+const defaultDateTo = () => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  return d.toISOString().slice(0, 10);
 };
 
 export default function PostMatchPage() {
   const [query, setQuery] = useState("");
   const [players, setPlayers] = useState<Player[]>([]);
-  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [selectedPlayers, setSelectedPlayers] = useState<Player[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [fixtures, setFixtures] = useState<Fixture[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -64,9 +161,14 @@ export default function PostMatchPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [fixturesError, setFixturesError] = useState<string | null>(null);
   const [expandedMatchId, setExpandedMatchId] = useState<number | null>(null);
+  const [dateFrom, setDateFrom] = useState(() => defaultDateFrom());
+  const [dateTo, setDateTo] = useState(() => defaultDateTo());
+  const [detailsByKey, setDetailsByKey] = useState<
+    Record<string, { playerDetails: unknown; teamDetails: unknown }>
+  >({});
+  const selectedPlayerIds = selectedPlayers.map((p) => p.wyId ?? p.id).filter((id): id is number => id != null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  const playerId = selectedPlayer?.wyId ?? selectedPlayer?.id;
+  const detailsFetchedRef = useRef<Set<string>>(new Set());
 
   const runSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -111,29 +213,139 @@ export default function PostMatchPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  function selectPlayer(p: Player) {
-    setSelectedPlayer(p);
+  useEffect(() => {
+    if (expandedMatchId == null || fixtures.length === 0) return;
+    const fixture = fixtures.find(
+      (f) => (f.matchId ?? f.wyId) === expandedMatchId
+    );
+    const playersInMatch = fixture?.playersInMatch ?? [];
+    for (const p of playersInMatch) {
+      const pid = p.wyId ?? p.id;
+      if (pid == null) continue;
+      const key = `${expandedMatchId}-${pid}`;
+      if (detailsByKey[key] || detailsFetchedRef.current.has(key)) continue;
+      detailsFetchedRef.current.add(key);
+      (async () => {
+        try {
+          const playerRes = await fetch(
+            `/api/wyscout/players/${pid}?details=currentTeam,playerDetails`
+          ).then((r) => r.json());
+          const teamWyId = (playerRes as { currentTeam?: { wyId?: number } })
+            ?.currentTeam?.wyId;
+          let teamDetails: unknown = null;
+          if (teamWyId != null) {
+            teamDetails = await fetch(
+              `/api/wyscout/teams/${teamWyId}?details=teamDetails`
+            ).then((r) => r.json());
+          }
+          setDetailsByKey((prev) => ({
+            ...prev,
+            [key]: { playerDetails: playerRes, teamDetails },
+          }));
+        } catch {
+          setDetailsByKey((prev) => ({
+            ...prev,
+            [key]: { playerDetails: null, teamDetails: null },
+          }));
+        }
+      })();
+    }
+  }, [expandedMatchId, fixtures]);
+
+  async function enrichPlayerWithImages(playerId: number) {
+    try {
+      const playerRes = await fetch(`/api/wyscout/players/${playerId}`).then((r) => r.json());
+      const imageDataURL = (playerRes as { imageDataURL?: string })?.imageDataURL;
+      const currentTeam = (playerRes as { currentTeam?: { wyId?: number; name?: string } })?.currentTeam;
+      const teamWyId = currentTeam?.wyId;
+      let teamImageDataURL: string | undefined;
+      if (teamWyId != null) {
+        const teamRes = await fetch(`/api/wyscout/teams/${teamWyId}`).then((r) => r.json());
+        teamImageDataURL = (teamRes as { imageDataURL?: string })?.imageDataURL;
+      }
+      setSelectedPlayers((prev) =>
+        prev.map((pl) =>
+          (pl.wyId ?? pl.id) === playerId
+            ? {
+                ...pl,
+                imageDataURL: imageDataURL ?? pl.imageDataURL,
+                teamImageDataURL: teamImageDataURL ?? pl.teamImageDataURL,
+                currentTeam: currentTeam ? { ...pl.currentTeam, ...currentTeam } : pl.currentTeam,
+              }
+            : pl
+        )
+      );
+    } catch {
+      // ignore: keep player without images
+    }
+  }
+
+  function addPlayer(p: Player) {
+    const id = p.wyId ?? p.id;
+    if (id == null) return;
+    if (selectedPlayers.some((x) => (x.wyId ?? x.id) === id)) return;
+    setSelectedPlayers((prev) => [...prev, p]);
     setQuery("");
     setPlayers([]);
     setDropdownOpen(false);
     setFixtures([]);
     setFixturesError(null);
+    enrichPlayerWithImages(Number(id));
+  }
+
+  function removePlayer(p: Player) {
+    const id = p.wyId ?? p.id;
+    if (id == null) return;
+    setSelectedPlayers((prev) => prev.filter((x) => (x.wyId ?? x.id) !== id));
+    setFixtures([]);
+    setFixturesError(null);
   }
 
   async function loadFixtures() {
-    if (!playerId) return;
+    if (selectedPlayerIds.length === 0) return;
     setFixturesError(null);
     setFixturesLoading(true);
-    const from = new Date().toISOString().slice(0, 10);
+    const from = dateFrom || defaultDateFrom();
+    const to = dateTo ? `&to=${encodeURIComponent(dateTo)}` : "";
     try {
-      const res = await fetch(
-        `/api/wyscout/players/${playerId}/fixtures?from=${from}`
+      const results = await Promise.all(
+        selectedPlayerIds.map((playerId) =>
+          fetch(
+            `/api/wyscout/players/${playerId}/fixtures?from=${encodeURIComponent(from)}${to}`
+          ).then((res) => res.json())
+        )
       );
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to load fixtures");
-      const list = Array.isArray(data) ? data : data.fixtures ?? data.matches ?? [];
-      setFixtures(list);
-      if (list.length === 0) setFixturesError("Nessuna prossima partita trovata.");
+      const byMatchId = new Map<number, Fixture & { playerNames: string[]; playersInMatch: Player[] }>();
+      const nameOf = (p: Player) =>
+        [p.firstName, p.lastName].filter(Boolean).join(" ") || "—";
+      for (let i = 0; i < results.length; i++) {
+        const data = results[i];
+        if (data?.error) throw new Error(data.error);
+        const list = Array.isArray(data) ? data : data.fixtures ?? data.matches ?? [];
+        const player = selectedPlayers[i];
+        const playerName = nameOf(player);
+        for (const f of list) {
+          const mid = f.matchId ?? f.wyId;
+          if (mid == null) continue;
+          const existing = byMatchId.get(mid);
+          if (existing) {
+            if (!existing.playerNames!.includes(playerName)) {
+              existing.playerNames!.push(playerName);
+              existing.playersInMatch!.push(player);
+            }
+          } else {
+            byMatchId.set(mid, { ...f, playerNames: [playerName], playersInMatch: [player] });
+          }
+        }
+      }
+      const merged = Array.from(byMatchId.values()).sort((a, b) => {
+        const da = new Date(a.date ?? a.dateutc ?? 0).getTime();
+        const db = new Date(b.date ?? b.dateutc ?? 0).getTime();
+        return da - db;
+      });
+      setFixtures(merged);
+      if (merged.length === 0)
+        setFixturesError("Nessuna partita trovata nel periodo selezionato.");
     } catch (err) {
       setFixturesError(
         err instanceof Error ? err.message : "Errore nel caricamento partite"
@@ -143,19 +355,13 @@ export default function PostMatchPage() {
     }
   }
 
-  const playerName = selectedPlayer
-    ? [selectedPlayer.firstName, selectedPlayer.lastName]
-        .filter(Boolean)
-        .join(" ") || "Giocatore"
-    : "";
-
   return (
     <div className="py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white shadow rounded-lg p-6">
           <h1 className="text-3xl font-bold text-gray-900">Post match</h1>
           <p className="text-gray-600 mt-2">
-            Cerca un giocatore per nome e visualizza le sue prossime partite.
+            Cerca uno o più giocatori per nome, imposta il periodo (da / a) e visualizza le partite nel range di date.
           </p>
 
           <div className="mt-6 relative max-w-xl" ref={dropdownRef}>
@@ -183,21 +389,27 @@ export default function PostMatchPage() {
                   const name =
                     [p.firstName, p.lastName].filter(Boolean).join(" ") || "—";
                   const team = p.currentTeam?.name;
-                  const isSelected =
-                    selectedPlayer && (selectedPlayer.wyId ?? selectedPlayer.id) === id;
+                  const isAlreadySelected =
+                    selectedPlayers.some((x) => (x.wyId ?? x.id) === id);
                   return (
                     <li key={id ?? name}>
                       <button
                         type="button"
-                        onClick={() => selectPlayer(p)}
-                        className={`block w-full text-left px-4 py-2 hover:bg-gray-100 ${
-                          isSelected ? "bg-indigo-50 font-medium" : ""
+                        onClick={() => addPlayer(p)}
+                        disabled={isAlreadySelected}
+                        className={`block w-full text-left px-4 py-2 hover:bg-gray-100 disabled:opacity-70 disabled:cursor-default ${
+                          isAlreadySelected ? "bg-indigo-50 font-medium" : ""
                         }`}
                       >
                         <span className="text-gray-900">{name}</span>
                         {team && (
                           <span className="ml-2 text-sm text-gray-500">
                             – {team}
+                          </span>
+                        )}
+                        {isAlreadySelected && (
+                          <span className="ml-2 text-xs text-indigo-600">
+                            (già aggiunto)
                           </span>
                         )}
                       </button>
@@ -208,26 +420,61 @@ export default function PostMatchPage() {
             )}
           </div>
 
-          {selectedPlayer && (
-            <div className="mt-4 flex items-center gap-2">
-              <span className="text-sm text-gray-600">Giocatore selezionato:</span>
-              <span className="font-medium text-gray-900">
-                {[selectedPlayer.firstName, selectedPlayer.lastName]
-                  .filter(Boolean)
-                  .join(" ")}
-                {selectedPlayer.currentTeam?.name && (
-                  <span className="ml-1 font-normal text-gray-500">
-                    ({selectedPlayer.currentTeam.name})
+          {selectedPlayers.length > 0 && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-gray-600 w-full">Giocatori selezionati:</span>
+              {selectedPlayers.map((p) => {
+                const name = [p.firstName, p.lastName].filter(Boolean).join(" ") || "—";
+                const team = p.currentTeam?.name;
+                return (
+                  <span
+                    key={p.wyId ?? p.id}
+                    className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-800"
+                  >
+                    {name}
+                    {team && <span className="text-indigo-600">({team})</span>}
+                    <button
+                      type="button"
+                      onClick={() => removePlayer(p)}
+                      className="ml-1 rounded-full p-0.5 hover:bg-indigo-200 text-indigo-600"
+                      aria-label={`Rimuovi ${name}`}
+                    >
+                      ×
+                    </button>
                   </span>
-                )}
-              </span>
+                );
+              })}
             </div>
           )}
 
-          {selectedPlayer && playerId && (
+          {selectedPlayers.length > 0 && (
             <div className="mt-8">
+              <div className="flex flex-wrap items-end gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Da
+                  </label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    A
+                  </label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
               <h2 className="text-lg font-semibold text-gray-900">
-                Prossime partite – {playerName}
+                Partite nel periodo
               </h2>
               <button
                 type="button"
@@ -235,7 +482,7 @@ export default function PostMatchPage() {
                 disabled={fixturesLoading}
                 className="mt-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
-                {fixturesLoading ? "Caricamento..." : "Vedi prossime partite"}
+                {fixturesLoading ? "Caricamento..." : "Cerca partite"}
               </button>
 
               {fixturesError && (
@@ -243,11 +490,32 @@ export default function PostMatchPage() {
               )}
 
               {fixtures.length > 0 && (
-                <div className="mt-4 overflow-x-auto">
+                <>
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const csv = fixturesToCsv(fixtures);
+                        const base = "partite-post-match";
+                        const date = new Date().toISOString().slice(0, 10);
+                        downloadCsv(csv, `${base}-${date}.csv`);
+                      }}
+                      className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                    >
+                      Esporta CSV
+                    </button>
+                  </div>
+                  <div className="mt-4 overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead>
                       <tr>
                         <th className="w-10 px-2 py-2" aria-label="Espandi" />
+                        <th className="px-2 py-2 text-left text-xs font-medium uppercase text-gray-500 w-20">
+                          Foto
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                          Giocatore
+                        </th>
                         <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
                           Data
                         </th>
@@ -273,13 +541,14 @@ export default function PostMatchPage() {
                         const dateFormatted = dateStr
                           ? new Date(dateStr).toLocaleDateString("it-IT")
                           : "—";
-                        const label =
+                        const labelRaw =
                           f.label ??
                           (f.homeTeam?.name && f.awayTeam?.name
                             ? `${f.homeTeam.name} – ${f.awayTeam.name}`
                             : f.homeTeamId && f.awayTeamId
                               ? `Team ${f.homeTeamId} – Team ${f.awayTeamId}`
                               : "—");
+                        const label = stripScoreFromLabel(String(labelRaw ?? ""));
                         const area = f.areaName ?? f.competition?.area?.name;
                         const comp = f.competitionName ?? f.competition?.name;
                         const season = f.seasonName ?? f.season?.name;
@@ -303,7 +572,11 @@ export default function PostMatchPage() {
                           : "";
                                         const gameweekRange =
                                           gwStart && gwEnd ? `${gwStart} – ${gwEnd}` : "—";
-                                        const gameweekMatchesList = f.gameweekMatches ?? [];
+                                        const gameweekMatchesList = [...(f.gameweekMatches ?? [])].sort(
+                                          (a, b) =>
+                                            new Date(a.dateutc ?? a.date ?? 0).getTime() -
+                                            new Date(b.dateutc ?? b.date ?? 0).getTime()
+                                        );
                                         const playerMatchTime = new Date(
                                           (f.dateutc ?? f.date) ?? 0
                                         ).getTime();
@@ -328,6 +601,34 @@ export default function PostMatchPage() {
                                   </span>
                                 </button>
                               </td>
+                              <td className="px-2 py-2">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {(f.playersInMatch ?? []).map((p) => {
+                                    const pl = selectedPlayers.find((s) => (s.wyId ?? s.id) === (p.wyId ?? p.id)) ?? p;
+                                    const pImg = playerImageUrl(pl);
+                                    const tImg = teamImageUrl(pl);
+                                    return (
+                                      <div key={pl.wyId ?? pl.id} className="flex items-center gap-0.5">
+                                        {pImg ? (
+                                          <img src={pImg} alt="" className="w-8 h-8 rounded-full object-cover bg-gray-100" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                        ) : (
+                                          <span className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
+                                            {[pl.firstName, pl.lastName].filter(Boolean).join(" ").slice(0, 2).toUpperCase()}
+                                          </span>
+                                        )}
+                                        {tImg ? (
+                                          <img src={tImg} alt="" className="w-6 h-6 rounded object-cover bg-gray-100" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                        ) : (
+                                          <span className="w-6 h-6 rounded bg-gray-200 flex items-center justify-center text-[10px]" title={(pl.currentTeam as { name?: string })?.name ?? ""}>?</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </td>
+                              <td className="px-4 py-2 text-sm text-gray-900">
+                                {(f.playerNames ?? []).join(", ")}
+                              </td>
                               <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
                                 {dateFormatted}
                               </td>
@@ -346,7 +647,7 @@ export default function PostMatchPage() {
                             </tr>
                             {isExpanded && (
                               <tr key={`${rowKey}-detail`} className="bg-gray-50">
-                                <td colSpan={6} className="px-4 py-4">
+                                <td colSpan={8} className="px-4 py-4">
                                   <div className="text-sm text-black">
                                     <p className="mb-2 font-medium">
                                       Match del turno (
@@ -399,7 +700,7 @@ export default function PostMatchPage() {
                                                   className={`border-b border-gray-100 last:border-0 ${bgClass}`}
                                                 >
                                                   <td className="px-4 py-2">
-                                                    {m.label ?? "—"}
+                                                    {stripScoreFromLabel(String(m.label ?? "")) || "—"}
                                                   </td>
                                                   <td className="px-4 py-2 whitespace-nowrap">
                                                     {mDateFmt}
@@ -411,6 +712,65 @@ export default function PostMatchPage() {
                                         </table>
                                       )}
                                     </div>
+                                    <div className="mt-4">
+                                      <p className="mb-2 font-medium text-gray-900">
+                                        Dettagli giocatore e squadra
+                                      </p>
+                                      {(f.playersInMatch ?? []).map((pl) => {
+                                        const pid = pl.wyId ?? pl.id;
+                                        const key =
+                                          pid != null
+                                            ? `${f.matchId ?? f.wyId}-${pid}`
+                                            : "";
+                                        const details = key ? detailsByKey[key] : null;
+                                        const name =
+                                          [pl.firstName, pl.lastName]
+                                            .filter(Boolean)
+                                            .join(" ") || "—";
+                                        return (
+                                          <div
+                                            key={pid}
+                                            className="mb-4 rounded-lg border border-gray-200 bg-white overflow-hidden"
+                                          >
+                                            <p className="px-4 py-2 bg-gray-50 font-medium text-gray-800 border-b border-gray-200">
+                                              {name}
+                                            </p>
+                                            {!details ? (
+                                              <p className="px-4 py-2 text-sm text-gray-500">
+                                                Caricamento...
+                                              </p>
+                                            ) : (
+                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                                                <div>
+                                                  <p className="text-xs font-semibold uppercase text-gray-500 mb-1">
+                                                    playerDetails
+                                                  </p>
+                                                  <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-64 border border-gray-100">
+                                                    {JSON.stringify(
+                                                      details.playerDetails,
+                                                      null,
+                                                      2
+                                                    )}
+                                                  </pre>
+                                                </div>
+                                                <div>
+                                                  <p className="text-xs font-semibold uppercase text-gray-500 mb-1">
+                                                    teamDetails
+                                                  </p>
+                                                  <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-64 border border-gray-100">
+                                                    {JSON.stringify(
+                                                      details.teamDetails,
+                                                      null,
+                                                      2
+                                                    )}
+                                                  </pre>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
                                 </td>
                               </tr>
@@ -421,6 +781,7 @@ export default function PostMatchPage() {
                     </tbody>
                   </table>
                 </div>
+                </>
               )}
             </div>
           )}
