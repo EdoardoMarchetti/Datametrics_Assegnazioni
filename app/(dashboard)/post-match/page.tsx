@@ -136,13 +136,23 @@ function downloadCsv(csv: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+/** YYYY-MM-DD in local time (so calendar day matches user timezone) */
+function toLocalDateKey(d: Date): string {
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 /** Group fixtures by local date (YYYY-MM-DD) for calendar view */
 function groupFixturesByDay(fixtures: Fixture[]): Map<string, Fixture[]> {
   const byDay = new Map<string, Fixture[]>();
   for (const f of fixtures) {
     const raw = f.date ?? f.dateutc ?? "";
     const d = new Date(raw);
-    const key = Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+    const key = toLocalDateKey(d);
+    if (!key) continue;
     const list = byDay.get(key) ?? [];
     list.push(f);
     byDay.set(key, list);
@@ -176,7 +186,7 @@ function buildCalendarWeeks(
   while (curr <= end) {
     const row: { dayKey: string; dayNum: number; month: number; year: number }[] = [];
     for (let c = 0; c < 7; c++) {
-      const key = curr.toISOString().slice(0, 10);
+      const key = toLocalDateKey(curr);
       row.push({
         dayKey: key,
         dayNum: curr.getDate(),
@@ -214,7 +224,7 @@ function buildCalendarByMonth(
     while (curr <= end) {
       const row: { dayKey: string; dayNum: number; month: number; year: number }[] = [];
       for (let c = 0; c < 7; c++) {
-        const key = curr.toISOString().slice(0, 10);
+        const key = toLocalDateKey(curr);
         row.push({
           dayKey: key,
           dayNum: curr.getDate(),
