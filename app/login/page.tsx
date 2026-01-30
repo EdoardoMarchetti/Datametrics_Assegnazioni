@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import logo from '@/image/dm_logo_white.png'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -39,15 +41,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-dm-bg py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        <div className="flex flex-col items-center gap-4">
+          <Image
+            src={logo}
+            alt="Datametrics Department"
+            height={48}
+            width={160}
+            className="h-12 w-auto object-contain"
+            priority
+          />
+          <h2 className="text-center text-3xl font-extrabold text-dm-text">
             Accedi al tuo account
           </h2>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div className="rounded-md shadow-sm -space-y-px">
+          <div className="rounded-lg -space-y-px space-y-4">
             <div>
               <label htmlFor="email-address" className="sr-only">
                 Indirizzo email
@@ -58,7 +68,7 @@ export default function LoginPage() {
                 type="email"
                 autoComplete="email"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="dm-input rounded-t-md rounded-b-none"
                 placeholder="Indirizzo email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -74,7 +84,7 @@ export default function LoginPage() {
                 type="password"
                 autoComplete="current-password"
                 required
-                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+                className="dm-input rounded-b-md rounded-t-none"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -83,8 +93,8 @@ export default function LoginPage() {
           </div>
 
           {error && (
-            <div className="rounded-md bg-red-50 p-4">
-              <div className="text-sm text-red-800">{error}</div>
+            <div className="rounded-md p-4 bg-dm-error-bg border border-dm-error/30">
+              <div className="text-sm text-dm-error">{error}</div>
             </div>
           )}
 
@@ -92,7 +102,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="dm-btn-primary w-full py-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Accesso in corso...' : 'Accedi'}
             </button>

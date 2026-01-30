@@ -2,26 +2,74 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Design system: Datametrics Department — basato su logo (blu #007BFF, bianco, nero) */
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  /* Backgrounds */
+  --dm-bg: #000000;
+  --dm-surface: #0f0f0f;
+  --dm-card: #171717;
+  --dm-elevated: #1f1f1f;
+
+  /* Borders */
+  --dm-border: #262626;
+  --dm-border-focus: #007bff;
+
+  /* Text */
+  --dm-text: #ffffff;
+  --dm-text-muted: #a3a3a3;
+  --dm-text-subtle: #737373;
+
+  /* Accent (logo blue) */
+  --dm-accent: #007bff;
+  --dm-accent-hover: #3395ff;
+  --dm-accent-muted: rgba(0, 123, 255, 0.15);
+  --dm-accent-muted-hover: rgba(0, 123, 255, 0.25);
+
+  /* Feedback */
+  --dm-error: #ef4444;
+  --dm-error-bg: rgba(239, 68, 68, 0.12);
+  --dm-success: #22c55e;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+@layer base {
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    background-color: var(--dm-bg);
+    color: var(--dm-text);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  /* Contrasto WCAG-friendly per testo su sfondo scuro */
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--dm-text);
   }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+@layer components {
+  .dm-input {
+    @apply w-full rounded-md border bg-[var(--dm-card)] px-3 py-2 text-[var(--dm-text)]
+      placeholder-[var(--dm-text-subtle)]
+      focus:border-[var(--dm-border-focus)] focus:outline-none focus:ring-1 focus:ring-[var(--dm-border-focus)]
+      transition-colors;
+    border-color: var(--dm-border);
+  }
+
+  .dm-btn-primary {
+    @apply rounded-md px-4 py-2 font-medium transition-colors
+      focus:outline-none focus:ring-2 focus:ring-[var(--dm-accent)] focus:ring-offset-2 focus:ring-offset-[var(--dm-bg)];
+    background-color: var(--dm-accent);
+    color: white;
+  }
+  .dm-btn-primary:hover:not(:disabled) {
+    background-color: var(--dm-accent-hover);
+  }
+
+  .dm-card {
+    background-color: var(--dm-card);
+    border: 1px solid var(--dm-border);
+    @apply rounded-lg;
+  }
 }

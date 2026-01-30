@@ -562,7 +562,7 @@ export default function PostMatchPage() {
   }
 
   const selectBaseClass =
-    "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20";
+    "dm-input w-full rounded-lg px-3 py-2 text-sm transition-colors focus:ring-2 focus:ring-dm-accent/30";
 
   const runSearch = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -738,9 +738,9 @@ export default function PostMatchPage() {
   return (
     <div className="py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="bg-white shadow rounded-lg p-6">
-          <h1 className="text-3xl font-bold text-gray-900">Post match</h1>
-          <p className="text-gray-600 mt-2">
+        <div className="dm-card p-6">
+          <h1 className="text-3xl font-bold text-dm-text">Post match</h1>
+          <p className="text-dm-text-muted mt-2">
             Cerca uno o più giocatori per nome, imposta il periodo (da / a) e visualizza le partite nel range di date.
           </p>
 
@@ -751,19 +751,19 @@ export default function PostMatchPage() {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => players.length > 0 && setDropdownOpen(true)}
               placeholder="Cerca giocatore (min. 2 caratteri)"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="dm-input w-full rounded-md px-3 py-2"
               autoComplete="off"
             />
             {searchLoading && (
-              <span className="absolute right-3 top-2.5 text-xs text-gray-500">
+              <span className="absolute right-3 top-2.5 text-xs text-dm-text-subtle">
                 Ricerca...
               </span>
             )}
             {searchError && (
-              <p className="mt-1 text-sm text-red-600">{searchError}</p>
+              <p className="mt-1 text-sm text-dm-error">{searchError}</p>
             )}
             {dropdownOpen && players.length > 0 && (
-              <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg">
+              <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md border border-dm-border bg-dm-card py-1 shadow-lg">
                 {players.map((p) => {
                   const id = p.wyId ?? p.id;
                   const name =
@@ -777,18 +777,18 @@ export default function PostMatchPage() {
                         type="button"
                         onClick={() => addPlayer(p)}
                         disabled={isAlreadySelected}
-                        className={`block w-full text-left px-4 py-2 hover:bg-gray-100 disabled:opacity-70 disabled:cursor-default ${
-                          isAlreadySelected ? "bg-indigo-50 font-medium" : ""
+                        className={`block w-full text-left px-4 py-2 hover:bg-dm-elevated disabled:opacity-70 disabled:cursor-default ${
+                          isAlreadySelected ? "bg-dm-accent-muted font-medium" : ""
                         }`}
                       >
-                        <span className="text-gray-900">{name}</span>
+                        <span className="text-dm-text">{name}</span>
                         {team && (
-                          <span className="ml-2 text-sm text-gray-500">
+                          <span className="ml-2 text-sm text-dm-text-subtle">
                             – {team}
                           </span>
                         )}
                         {isAlreadySelected && (
-                          <span className="ml-2 text-xs text-indigo-600">
+                          <span className="ml-2 text-xs text-dm-accent">
                             (già aggiunto)
                           </span>
                         )}
@@ -802,21 +802,21 @@ export default function PostMatchPage() {
 
           {selectedPlayers.length > 0 && (
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="text-sm text-gray-600 w-full">Giocatori selezionati:</span>
+              <span className="text-sm text-dm-text-muted w-full">Giocatori selezionati:</span>
               {selectedPlayers.map((p) => {
                 const name = [p.firstName, p.lastName].filter(Boolean).join(" ") || "—";
                 const team = p.currentTeam?.name;
                 return (
                   <span
                     key={p.wyId ?? p.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-800"
+                    className="inline-flex items-center gap-1 rounded-full bg-dm-accent-muted px-3 py-1 text-sm font-medium text-dm-accent"
                   >
                     {name}
-                    {team && <span className="text-indigo-600">({team})</span>}
+                    {team && <span className="text-dm-accent">({team})</span>}
                     <button
                       type="button"
                       onClick={() => removePlayer(p)}
-                      className="ml-1 rounded-full p-0.5 hover:bg-indigo-200 text-indigo-600"
+                      className="ml-1 rounded-full p-0.5 hover:opacity-80 text-dm-accent"
                       aria-label={`Rimuovi ${name}`}
                     >
                       ×
@@ -831,55 +831,55 @@ export default function PostMatchPage() {
             <div className="mt-8">
               <div className="flex flex-wrap items-end gap-4 mb-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-dm-text-muted mb-1">
                     Da
                   </label>
                   <input
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    className="rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="rounded-md border border-dm-border px-3 py-2 shadow-sm focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-dm-text mb-1">
                     A
                   </label>
                   <input
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
-                    className="rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="rounded-md border border-dm-border px-3 py-2 shadow-sm focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
                   />
                 </div>
               </div>
-              <h2 className="text-lg font-semibold text-gray-900">
+              <h2 className="text-lg font-semibold text-dm-text">
                 Partite nel periodo
               </h2>
               <button
                 type="button"
                 onClick={loadFixtures}
                 disabled={fixturesLoading}
-                className="mt-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="mt-2 rounded-md bg-dm-accent px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
               >
                 {fixturesLoading ? "Caricamento..." : "Cerca partite"}
               </button>
 
               {fixturesError && (
-                <p className="mt-2 text-sm text-red-600">{fixturesError}</p>
+                <p className="mt-2 text-sm text-dm-error">{fixturesError}</p>
               )}
 
               {fixtures.length > 0 && (
                 <>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <div className="flex rounded-md border border-gray-300 bg-white p-0.5 shadow-sm">
+                    <div className="flex rounded-md border border-dm-border bg-dm-card p-0.5 shadow-sm">
                       <button
                         type="button"
                         onClick={() => setViewMode("table")}
                         className={`rounded px-3 py-1.5 text-sm font-medium ${
                           viewMode === "table"
-                            ? "bg-indigo-600 text-white"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-dm-accent text-white"
+                            : "text-dm-text hover:bg-dm-surface"
                         }`}
                       >
                         Tabella
@@ -889,8 +889,8 @@ export default function PostMatchPage() {
                         onClick={() => setViewMode("calendar")}
                         className={`rounded px-3 py-1.5 text-sm font-medium ${
                           viewMode === "calendar"
-                            ? "bg-indigo-600 text-white"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-dm-accent text-white"
+                            : "text-dm-text hover:bg-dm-surface"
                         }`}
                       >
                         Calendario
@@ -900,8 +900,8 @@ export default function PostMatchPage() {
                         onClick={() => setViewMode("gantt")}
                         className={`rounded px-3 py-1.5 text-sm font-medium ${
                           viewMode === "gantt"
-                            ? "bg-indigo-600 text-white"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-dm-accent text-white"
+                            : "text-dm-text hover:bg-dm-surface"
                         }`}
                       >
                         Gantt
@@ -915,7 +915,7 @@ export default function PostMatchPage() {
                         const date = new Date().toISOString().slice(0, 10);
                         downloadCsv(csv, `${base}-${date}.csv`);
                       }}
-                      className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                      className="rounded-md border border-dm-border bg-dm-card px-4 py-2 text-sm font-medium text-dm-text shadow-sm hover:bg-dm-surface"
                     >
                       Esporta CSV
                     </button>
@@ -926,7 +926,7 @@ export default function PostMatchPage() {
                     const monthsData = buildCalendarByMonth(byDay);
                     if (monthsData.length === 0) {
                       return (
-                        <div className="mt-6 text-sm text-gray-500">
+                        <div className="mt-6 text-sm text-dm-text-subtle">
                           Nessuna partita da mostrare nel calendario.
                         </div>
                       );
@@ -966,30 +966,30 @@ export default function PostMatchPage() {
                             type="button"
                             onClick={handleExportCalendarImage}
                             disabled={calendarExporting}
-                            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                            className="rounded-md border border-dm-border bg-dm-card px-3 py-2 text-sm font-medium text-dm-text shadow-sm hover:bg-dm-surface disabled:opacity-50"
                           >
                             {calendarExporting ? "Esportazione..." : "Esporta come immagine"}
                           </button>
                         </div>
-                        <div ref={calendarExportRef} className="bg-white rounded-lg border border-gray-200 p-4">
+                        <div ref={calendarExportRef} className="bg-dm-card rounded-lg border border-dm-border p-4">
                           <div className="flex items-center justify-between gap-4 mb-4">
                             <button
                               type="button"
                               onClick={() => setCalendarMonthKey(monthsData[currentIndex - 1].monthKey)}
                               disabled={!canPrev}
-                              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="rounded-md border border-dm-border bg-dm-card px-3 py-2 text-sm font-medium text-dm-text shadow-sm hover:bg-dm-surface disabled:opacity-50 disabled:cursor-not-allowed"
                               aria-label="Mese precedente"
                             >
                               ← Precedente
                             </button>
-                            <h3 className="text-lg font-semibold text-gray-900 capitalize">
+                            <h3 className="text-lg font-semibold text-dm-text capitalize">
                               {currentMonth.monthLabel}
                             </h3>
                             <button
                               type="button"
                               onClick={() => setCalendarMonthKey(monthsData[currentIndex + 1].monthKey)}
                               disabled={!canNext}
-                              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="rounded-md border border-dm-border bg-dm-card px-3 py-2 text-sm font-medium text-dm-text shadow-sm hover:bg-dm-surface disabled:opacity-50 disabled:cursor-not-allowed"
                               aria-label="Mese successivo"
                             >
                               Successivo →
@@ -1002,7 +1002,7 @@ export default function PostMatchPage() {
                                     {WEEKDAY_LABELS.map((w) => (
                                       <th
                                         key={w}
-                                        className="border border-gray-200 bg-gray-50 px-1.5 py-1.5 text-center text-xs font-medium uppercase text-gray-500"
+                                        className="border border-dm-border bg-dm-surface px-1.5 py-1.5 text-center text-xs font-medium uppercase text-dm-text-subtle"
                                       >
                                         {w}
                                       </th>
@@ -1018,16 +1018,16 @@ export default function PostMatchPage() {
                                         return (
                                           <td
                                             key={dayKey}
-                                            className={`align-top border border-gray-200 p-1 min-h-[120px] ${isThisMonth ? "bg-white" : "bg-gray-50/80"}`}
+                                            className={`align-top border border-dm-border p-1 min-h-[120px] ${isThisMonth ? "bg-dm-card" : "bg-dm-surface/80"}`}
                                           >
                                             <div className="flex items-center justify-between gap-0.5 mb-1">
                                               <span
                                                 className={`text-xs font-medium ${
                                                   dayFixtures.length > 0
-                                                    ? "text-indigo-600"
+                                                    ? "text-dm-accent"
                                                     : isThisMonth
-                                                      ? "text-gray-700"
-                                                      : "text-gray-400"
+                                                      ? "text-dm-text"
+                                                      : "text-dm-text-subtle"
                                                 }`}
                                               >
                                                 {dayNum}
@@ -1070,7 +1070,7 @@ export default function PostMatchPage() {
                                                         setExpandedMatchId((f.matchId ?? f.wyId) ?? null);
                                                       }
                                                     }}
-                                                    className="rounded border border-gray-200 bg-white p-1.5 shadow-sm hover:border-gray-300 hover:ring-2 hover:ring-indigo-500/50 cursor-pointer text-left"
+                                                    className="rounded border border-dm-border bg-dm-card p-1.5 shadow-sm hover:border-dm-border hover:ring-2 hover:ring-dm-accent/50 cursor-pointer text-left"
                                                   >
                                                     <div className="flex items-start gap-1.5">
                                                       <div className="flex shrink-0 -space-x-1.5">
@@ -1080,7 +1080,7 @@ export default function PostMatchPage() {
                                                           return (
                                                             <span
                                                               key={pl.wyId ?? pl.id}
-                                                              className="inline-block w-6 h-6 rounded-full border border-white bg-gray-100 overflow-hidden ring-1 ring-gray-200"
+                                                              className="inline-block w-6 h-6 rounded-full border border-white bg-dm-elevated overflow-hidden ring-1 ring-dm-border"
                                                               title={[pl.firstName, pl.lastName].filter(Boolean).join(" ")}
                                                             >
                                                               {pImg ? (
@@ -1093,7 +1093,7 @@ export default function PostMatchPage() {
                                                                   }}
                                                                 />
                                                               ) : (
-                                                                <span className="w-full h-full flex items-center justify-center text-[9px] font-medium text-gray-600">
+                                                                <span className="w-full h-full flex items-center justify-center text-[9px] font-medium text-dm-text-muted">
                                                                   {[pl.firstName, pl.lastName].filter(Boolean).join(" ").slice(0, 2).toUpperCase()}
                                                                 </span>
                                                               )}
@@ -1102,9 +1102,9 @@ export default function PostMatchPage() {
                                                         })}
                                                       </div>
                                                       <div className="min-w-0 flex-1">
-                                                        <p className="font-medium text-gray-900 text-[11px] leading-tight line-clamp-2">{label}</p>
-                                                        <p className="mt-0.5 text-[9px] text-gray-600 truncate">{compGw}</p>
-                                                        <p className="text-[9px] text-gray-500">{dateRange}</p>
+                                                        <p className="font-medium text-dm-text text-[11px] leading-tight line-clamp-2">{label}</p>
+                                                        <p className="mt-0.5 text-[9px] text-dm-text-muted truncate">{compGw}</p>
+                                                        <p className="text-[9px] text-dm-text-subtle">{dateRange}</p>
                                                       </div>
                                                     </div>
                                                   </div>
@@ -1128,7 +1128,7 @@ export default function PostMatchPage() {
                     const ganttTasks = buildGanttTasks(fixtures, fixtureAssignments, assignableUsers, deliveryDateOverrides);
                     if (ganttTasks.length === 0) {
                       return (
-                        <div className="mt-6 text-sm text-gray-500">
+                        <div className="mt-6 text-sm text-dm-text-subtle">
                           Nessuna assegnazione da mostrare. Assegna report o video alle partite nella tabella.
                         </div>
                       );
@@ -1152,17 +1152,17 @@ export default function PostMatchPage() {
 
                     return (
                       <div className="mt-6">
-                        <p className="text-sm text-gray-600 mb-3">
+                        <p className="text-sm text-dm-text-muted mb-3">
                           Inizio = data partita · Fine = data di consegna
                         </p>
-                        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                        <div className="overflow-x-auto rounded-lg border border-dm-border bg-dm-card">
                           <div style={{ width: leftLabelWidth + chartWidth, minWidth: "100%" }} className="flex">
-                            <div className="shrink-0 flex flex-col border-r border-gray-200 bg-gray-50/80" style={{ width: leftLabelWidth }}>
-                              <div className="h-7 flex items-center px-3 border-b border-gray-200 text-xs font-semibold uppercase text-gray-500 shrink-0">Utente</div>
+                            <div className="shrink-0 flex flex-col border-r border-dm-border bg-dm-surface/80" style={{ width: leftLabelWidth }}>
+                              <div className="h-7 flex items-center px-3 border-b border-dm-border text-xs font-semibold uppercase text-dm-text-subtle shrink-0">Utente</div>
                               {sortedUserEntries.map(([userId, tasks]) => (
                                 <div
                                   key={userId}
-                                  className="px-3 flex items-center shrink-0 text-sm font-medium text-gray-900 border-b border-gray-200 last:border-0"
+                                  className="px-3 flex items-center shrink-0 text-sm font-medium text-dm-text border-b border-dm-border last:border-0"
                                   style={{ height: 56 }}
                                 >
                                   {tasks[0].userName || userId}
@@ -1171,7 +1171,7 @@ export default function PostMatchPage() {
                             </div>
                             <div className="flex-1 relative py-0 pr-2 flex flex-col" style={{ width: chartWidth }}>
                               <div className="flex flex-col flex-1 min-h-0">
-                                <div className="flex text-xs text-gray-500 border-b border-gray-100 px-1 shrink-0 h-7 items-center">
+                                <div className="flex text-xs text-dm-text-subtle border-b border-dm-border px-1 shrink-0 h-7 items-center">
                                   {(() => {
                                     const start = new Date(minTs);
                                     const daysToShow = Math.min(31, totalDays);
@@ -1197,7 +1197,7 @@ export default function PostMatchPage() {
                                   return (
                                   <div
                                     key={userId}
-                                    className={`flex items-center border-b border-gray-200 last:border-0 relative shrink-0 transition-colors ${isDropTarget ? "bg-blue-50" : ""}`}
+                                    className={`flex items-center border-b border-dm-border last:border-0 relative shrink-0 transition-colors ${isDropTarget ? "bg-dm-accent-muted" : ""}`}
                                     style={{ height: 56, width: "100%" }}
                                     onDragOver={(e) => {
                                       e.preventDefault();
@@ -1236,7 +1236,7 @@ export default function PostMatchPage() {
                                               e.dataTransfer.effectAllowed = "move";
                                               e.dataTransfer.setData("text/plain", task.label);
                                             }}
-                                            className={`absolute top-1 bottom-1 rounded-md overflow-hidden flex items-center min-w-[4px] border transition-all duration-150 cursor-grab active:cursor-grabbing ${isHovered ? "z-20 shadow-lg ring-2 ring-gray-800 ring-offset-1 border-white scale-[1.02]" : "z-0 shadow-sm border-white/20"}`}
+                                            className={`absolute top-1 bottom-1 rounded-md overflow-hidden flex items-center min-w-[4px] border transition-all duration-150 cursor-grab active:cursor-grabbing ${isHovered ? "z-20 shadow-lg ring-2 ring-dm-accent ring-offset-1 border-white scale-[1.02]" : "z-0 shadow-sm border-white/20"}`}
                                             style={{
                                               left: `calc(${leftPct}% + ${gapPx / 2}px)`,
                                               width: `calc(${Math.max(widthPct, 2)}% - ${gapPx}px)`,
@@ -1281,13 +1281,13 @@ export default function PostMatchPage() {
                             </div>
                           </div>
                         </div>
-                        <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-600" /> Report</span>
-                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-600" /> Video</span>
+                        <div className="mt-2 flex gap-4 text-xs text-dm-text-subtle">
+                          <span className="flex items-center gap-1 text-dm-text"><span className="w-3 h-3 rounded bg-dm-accent" /> Report</span>
+                          <span className="flex items-center gap-1 text-dm-text"><span className="w-3 h-3 rounded bg-orange-600" /> Video</span>
                         </div>
                         {ganttTooltip && (
                           <div
-                            className="fixed z-50 pointer-events-none px-2 py-1.5 text-xs font-medium text-white bg-gray-900 rounded shadow-lg whitespace-nowrap"
+                            className="fixed z-50 pointer-events-none px-2 py-1.5 text-xs font-medium text-white bg-dm-elevated rounded shadow-lg whitespace-nowrap"
                             style={{ left: ganttTooltip.x + 10, top: ganttTooltip.y + 8 }}
                           >
                             {ganttTooltip.text}
@@ -1303,28 +1303,28 @@ export default function PostMatchPage() {
                     <thead>
                       <tr>
                         <th className="w-10 px-3 py-3 text-left" aria-label="Espandi" />
-                        <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 w-20">
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase text-dm-text-subtle w-20">
                           Foto
                         </th>
-                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-dm-text-subtle">
                           Giocatore
                         </th>
-                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-dm-text-subtle">
                           Data / Label
                         </th>
-                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-dm-text-subtle">
                           Area / Competizione / Stagione / Round
                         </th>
-                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-dm-text-subtle">
                           Gameweek
                         </th>
-                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500 whitespace-nowrap">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-dm-text-subtle whitespace-nowrap">
                           Gameweek inizio – fine
                         </th>
-                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500 whitespace-nowrap">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-dm-text-subtle whitespace-nowrap">
                           Data di consegna
                         </th>
-                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500 min-w-[280px]">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-dm-text-subtle min-w-[280px]">
                           Assegnazioni (report / video per giocatore)
                         </th>
                       </tr>
@@ -1389,7 +1389,7 @@ export default function PostMatchPage() {
                                         : (f.matchId ?? f.wyId) ?? null
                                     )
                                   }
-                                  className="text-gray-500 hover:text-gray-700"
+                                  className="text-dm-text-subtle hover:text-dm-text"
                                   aria-expanded={isExpanded}
                                 >
                                   <span className="inline-block transition-transform">
@@ -1406,14 +1406,14 @@ export default function PostMatchPage() {
                                     return (
                                       <div key={pl.wyId ?? pl.id} className="flex items-center gap-0.5">
                                         {pImg ? (
-                                          <img src={pImg} alt="" className="w-8 h-8 rounded-full object-cover bg-gray-100" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                          <img src={pImg} alt="" className="w-8 h-8 rounded-full object-cover bg-dm-elevated" onError={(e) => { e.currentTarget.style.display = "none"; }} />
                                         ) : (
-                                          <span className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
+                                          <span className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-dm-text-muted">
                                             {[pl.firstName, pl.lastName].filter(Boolean).join(" ").slice(0, 2).toUpperCase()}
                                           </span>
                                         )}
                                         {tImg ? (
-                                          <span className="inline-flex w-6 h-6 shrink-0 items-center justify-center overflow-hidden rounded bg-gray-100">
+                                          <span className="inline-flex w-6 h-6 shrink-0 items-center justify-center overflow-hidden rounded bg-dm-elevated">
                                             <img src={tImg} alt="" className="max-h-6 max-w-6 w-auto h-auto object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
                                           </span>
                                         ) : (
@@ -1424,22 +1424,22 @@ export default function PostMatchPage() {
                                   })}
                                 </div>
                               </td>
-                              <td className="px-5 py-3 text-sm text-gray-900 align-middle">
+                              <td className="px-5 py-3 text-sm text-dm-text align-middle">
                                 {(f.playerNames ?? []).join(", ")}
                               </td>
                               <td className="px-5 py-3 text-sm align-middle">
                                 <div className="flex flex-col gap-0.5">
-                                  <span className="text-gray-700 text-xs whitespace-nowrap">{dateFormatted}</span>
-                                  <span className="text-gray-900 font-medium">{label}</span>
+                                  <span className="text-dm-text text-xs whitespace-nowrap">{dateFormatted}</span>
+                                  <span className="text-dm-text font-medium">{label}</span>
                                 </div>
                               </td>
-                              <td className="px-5 py-3 text-sm text-gray-700 align-middle">
+                              <td className="px-5 py-3 text-sm text-dm-text align-middle">
                                 {parts.length > 0 ? parts.join(" / ") : "—"}
                               </td>
-                              <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap align-middle">
+                              <td className="px-5 py-3 text-sm text-dm-text whitespace-nowrap align-middle">
                                 {gameweek}
                               </td>
-                              <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap align-middle">
+                              <td className="px-5 py-3 text-sm text-dm-text whitespace-nowrap align-middle">
                                 {gameweekRange}
                               </td>
                               <td className="px-5 py-3 align-middle">
@@ -1455,7 +1455,7 @@ export default function PostMatchPage() {
                                           v ? { ...prev, [rowKey]: v } : (() => { const { [rowKey]: _, ...rest } = prev; return rest; })()
                                         );
                                       }}
-                                      className="block w-full min-w-[120px] rounded border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                      className="block w-full min-w-[120px] rounded border border-dm-border px-2 py-1 text-sm text-dm-text focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
                                     />
                                   );
                                 })()}
@@ -1475,28 +1475,28 @@ export default function PostMatchPage() {
                                     return (
                                       <div
                                         key={pid}
-                                        className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50/80 p-2 shadow-sm"
+                                        className="flex flex-col gap-2 rounded-lg border border-dm-border bg-dm-surface/80 p-2 shadow-sm"
                                       >
                                         <div className="flex min-w-0 shrink-0 items-center justify-center gap-1.5">
                                           {pImg ? (
                                             <img
                                               src={pImg}
                                               alt=""
-                                              className="h-7 w-7 rounded-full object-cover ring-1 ring-gray-200"
+                                              className="h-7 w-7 rounded-full object-cover ring-1 ring-dm-border"
                                               onError={(e) => { e.currentTarget.style.display = "none"; }}
                                             />
                                           ) : (
-                                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-[10px] font-medium text-gray-600">
+                                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-[10px] font-medium text-dm-text-muted">
                                               {playerLabel.slice(0, 2).toUpperCase()}
                                             </span>
                                           )}
-                                          <span className="max-w-[80px] truncate text-xs font-medium text-gray-800" title={playerLabel}>
+                                          <span className="max-w-[80px] truncate text-xs font-medium text-dm-text" title={playerLabel}>
                                             {playerLabel}
                                           </span>
                                         </div>
                                         <div className="flex flex-1 flex-wrap items-end gap-2">
                                           <div className="min-w-[120px] flex-1">
-                                            <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                                            <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-dm-text-subtle">
                                               Report
                                             </label>
                                             <select
@@ -1513,14 +1513,14 @@ export default function PostMatchPage() {
                                             </select>
                                           </div>
                                           <div className="min-w-[100px] flex-1">
-                                            <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                                            <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-dm-text-subtle">
                                               Video
                                             </label>
                                             <select
                                               value={videoValue}
                                               onChange={(e) => setVideoUser(key, e.target.value || null)}
                                               disabled={!hasReport}
-                                              className={`${selectBaseClass} ${!hasReport ? "cursor-not-allowed bg-gray-100 text-gray-500" : ""}`}
+                                              className={`${selectBaseClass} ${!hasReport ? "cursor-not-allowed bg-dm-elevated text-dm-text-subtle" : ""}`}
                                               title={!hasReport ? "Seleziona prima Report" : undefined}
                                             >
                                               <option value="">—</option>
@@ -1539,26 +1539,26 @@ export default function PostMatchPage() {
                               </td>
                             </tr>
                             {isExpanded && (
-                              <tr key={`${rowKey}-detail`} className="bg-gray-50">
+                              <tr key={`${rowKey}-detail`} className="bg-dm-surface">
                                 <td colSpan={9} className="px-4 py-4">
                                   <div className="text-sm text-black">
                                     <p className="mb-2 font-medium">
                                       Match del turno (
                                       {gameweekMatchesList.length})
                                     </p>
-                                    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                                    <div className="overflow-hidden rounded-lg border border-dm-border bg-dm-card">
                                       {gameweekMatchesList.length === 0 ? (
-                                        <p className="px-4 py-3 text-gray-500">
+                                        <p className="px-4 py-3 text-dm-text-subtle">
                                           Nessun match
                                         </p>
                                       ) : (
                                         <table className="min-w-full text-left">
                                           <thead>
-                                            <tr className="border-b border-gray-200 bg-gray-50">
-                                              <th className="px-4 py-2 font-medium text-gray-700">
+                                            <tr className="border-b border-dm-border bg-dm-surface">
+                                              <th className="px-4 py-2 font-medium text-dm-text">
                                                 Partita
                                               </th>
-                                              <th className="px-4 py-2 font-medium text-gray-700 whitespace-nowrap">
+                                              <th className="px-4 py-2 font-medium text-dm-text whitespace-nowrap">
                                                 Data
                                               </th>
                                             </tr>
@@ -1590,7 +1590,7 @@ export default function PostMatchPage() {
                                               return (
                                                 <tr
                                                   key={m.matchId ?? mi}
-                                                  className={`border-b border-gray-100 last:border-0 ${bgClass}`}
+                                                  className={`border-b border-dm-border last:border-0 ${bgClass}`}
                                                 >
                                                   <td className="px-4 py-2">
                                                     {stripScoreFromLabel(String(m.label ?? "")) || "—"}
@@ -1661,10 +1661,10 @@ export default function PostMatchPage() {
             aria-labelledby="calendar-popup-title"
           >
             <div
-              className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+              className="bg-dm-card rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-start gap-4 px-4 py-4 border-b border-gray-200 shrink-0">
+              <div className="flex items-start gap-4 px-4 py-4 border-b border-dm-border shrink-0">
                 <div className="flex shrink-0 -space-x-2">
                   {(f.playersInMatch ?? []).map((p) => {
                     const pl = selectedPlayers.find((s) => (s.wyId ?? s.id) === (p.wyId ?? p.id)) ?? p;
@@ -1672,13 +1672,13 @@ export default function PostMatchPage() {
                     return (
                       <span
                         key={pl.wyId ?? pl.id}
-                        className="inline-block w-10 h-10 rounded-full border-2 border-white bg-gray-100 overflow-hidden ring-1 ring-gray-200"
+                        className="inline-block w-10 h-10 rounded-full border-2 border-white bg-dm-elevated overflow-hidden ring-1 ring-dm-border"
                         title={[pl.firstName, pl.lastName].filter(Boolean).join(" ")}
                       >
                         {pImg ? (
                           <img src={pImg} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
                         ) : (
-                          <span className="w-full h-full flex items-center justify-center text-xs font-medium text-gray-600">
+                          <span className="w-full h-full flex items-center justify-center text-xs font-medium text-dm-text-muted">
                             {[pl.firstName, pl.lastName].filter(Boolean).join(" ").slice(0, 2).toUpperCase()}
                           </span>
                         )}
@@ -1687,24 +1687,24 @@ export default function PostMatchPage() {
                   })}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 id="calendar-popup-title" className="text-lg font-semibold text-gray-900">
+                  <h2 id="calendar-popup-title" className="text-lg font-semibold text-dm-text">
                     {label}
                   </h2>
-                  <p className="mt-0.5 text-sm text-gray-600">{compGw}</p>
-                  <p className="mt-0.5 text-sm text-gray-500">{dateRange}</p>
+                  <p className="mt-0.5 text-sm text-dm-text-muted">{compGw}</p>
+                  <p className="mt-0.5 text-sm text-dm-text-subtle">{dateRange}</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setCalendarPopupFixture(null)}
-                  className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+                  className="rounded p-1.5 text-dm-text-subtle hover:bg-dm-elevated hover:text-dm-text shrink-0"
                   aria-label="Chiudi"
                 >
                   ×
                 </button>
               </div>
               <div className="p-4 overflow-auto text-sm text-black space-y-4">
-                <div className="space-y-3 pb-4 border-b border-gray-200">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Assegnazioni (report / video per giocatore)</p>
+                <div className="space-y-3 pb-4 border-b border-dm-border">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-dm-text-subtle">Assegnazioni (report / video per giocatore)</p>
                   {(f.playersInMatch ?? []).map((p) => {
                     const pl = selectedPlayers.find((s) => (s.wyId ?? s.id) === (p.wyId ?? p.id)) ?? p;
                     const pid = pl.wyId ?? pl.id;
@@ -1719,28 +1719,28 @@ export default function PostMatchPage() {
                     return (
                       <div
                         key={pid}
-                        className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50/80 p-3 shadow-sm"
+                        className="flex flex-col gap-3 rounded-lg border border-dm-border bg-dm-surface/80 p-3 shadow-sm"
                       >
                         <div className="flex min-w-0 shrink-0 flex-col items-center gap-1">
                           {pImg ? (
                             <img
                               src={pImg}
                               alt=""
-                              className="h-12 w-12 rounded-full object-cover ring-1 ring-gray-200"
+                              className="h-12 w-12 rounded-full object-cover ring-1 ring-dm-border"
                               onError={(e) => { e.currentTarget.style.display = "none"; }}
                             />
                           ) : (
-                            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-600">
+                            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-dm-text-muted">
                               {playerLabel.slice(0, 2).toUpperCase()}
                             </span>
                           )}
-                          <span className="max-w-[140px] truncate text-sm font-medium text-gray-800" title={playerLabel}>
+                          <span className="max-w-[140px] truncate text-sm font-medium text-dm-text" title={playerLabel}>
                             {playerLabel}
                           </span>
                         </div>
                         <div className="flex flex-1 flex-wrap items-end gap-3">
                           <div className="min-w-[160px] flex-1">
-                            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-dm-text-subtle">
                               Report
                             </label>
                             <select
@@ -1757,14 +1757,14 @@ export default function PostMatchPage() {
                             </select>
                           </div>
                           <div className="min-w-[160px] flex-1">
-                            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-dm-text-subtle">
                               Video
                             </label>
                             <select
                               value={videoValue}
                               onChange={(e) => setVideoUser(key, e.target.value || null)}
                               disabled={!hasReport}
-                              className={`${selectBaseClass} ${!hasReport ? "cursor-not-allowed bg-gray-100 text-gray-500" : ""}`}
+                              className={`${selectBaseClass} ${!hasReport ? "cursor-not-allowed bg-dm-elevated text-dm-text-subtle" : ""}`}
                               title={!hasReport ? "Seleziona prima Report" : undefined}
                             >
                               <option value="">—</option>
@@ -1781,15 +1781,15 @@ export default function PostMatchPage() {
                   })}
                 </div>
                 <p className="mb-2 font-medium">Match del turno ({gameweekMatchesList.length})</p>
-                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                <div className="overflow-hidden rounded-lg border border-dm-border bg-dm-card">
                   {gameweekMatchesList.length === 0 ? (
-                    <p className="px-4 py-3 text-gray-500">Nessun match</p>
+                    <p className="px-4 py-3 text-dm-text-subtle">Nessun match</p>
                   ) : (
                     <table className="min-w-full text-left">
                       <thead>
-                        <tr className="border-b border-gray-200 bg-gray-50">
-                          <th className="px-4 py-2 font-medium text-gray-700">Partita</th>
-                          <th className="px-4 py-2 font-medium text-gray-700 whitespace-nowrap">Data</th>
+                        <tr className="border-b border-dm-border bg-dm-surface">
+                          <th className="px-4 py-2 font-medium text-dm-text">Partita</th>
+                          <th className="px-4 py-2 font-medium text-dm-text whitespace-nowrap">Data</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1803,7 +1803,7 @@ export default function PostMatchPage() {
                           const bgClass =
                             diffDays <= 0 ? "bg-green-100" : diffDays <= 2 ? "bg-yellow-100" : "bg-red-100";
                           return (
-                            <tr key={m.matchId ?? mi} className={`border-b border-gray-100 last:border-0 ${bgClass}`}>
+                            <tr key={m.matchId ?? mi} className={`border-b border-dm-border last:border-0 ${bgClass}`}>
                               <td className="px-4 py-2">{stripScoreFromLabel(String(m.label ?? "")) || "—"}</td>
                               <td className="px-4 py-2 whitespace-nowrap">{mDateFmt}</td>
                             </tr>
