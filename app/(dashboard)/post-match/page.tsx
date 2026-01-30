@@ -89,6 +89,14 @@ function getDeliveryDate(f: Fixture): string {
   return "";
 }
 
+function getEffectiveDeliveryDate(
+  rowKey: string,
+  f: Fixture,
+  overrides: Record<string, string>
+): string {
+  return overrides[rowKey] ?? getDeliveryDate(f);
+}
+
 type GanttTask = {
   userId: string;
   userName: string;
@@ -105,7 +113,8 @@ type GanttTask = {
 function buildGanttTasks(
   fixtures: Fixture[],
   fixtureAssignments: Record<string, FixtureAssignment>,
-  assignableUsers: AssignableUser[]
+  assignableUsers: AssignableUser[],
+  deliveryDateOverrides: Record<string, string>
 ): GanttTask[] {
   const userDisplay = (id: string): string => {
     if (!id) return "";
@@ -115,10 +124,11 @@ function buildGanttTasks(
   const tasks: GanttTask[] = [];
   for (let i = 0; i < fixtures.length; i++) {
     const f = fixtures[i];
+    const rowKey = String(f.matchId ?? f.wyId ?? i);
     const matchDateStr = f.date ?? f.dateutc;
     const matchDate = matchDateStr ? new Date(matchDateStr) : null;
     let endDate: Date | null = null;
-    const deliveryDateStr = getDeliveryDate(f);
+    const deliveryDateStr = getEffectiveDeliveryDate(rowKey, f, deliveryDateOverrides);
     if (deliveryDateStr) {
       endDate = new Date(deliveryDateStr + "T23:59:59");
     } else if (f.gameweekEndDate) {
@@ -138,7 +148,6 @@ function buildGanttTasks(
     const matchLabel = stripScoreFromLabel(
       f.label ?? (f.homeTeam?.name && f.awayTeam?.name ? `${f.homeTeam.name} – ${f.awayTeam.name}` : `Match ${f.matchId ?? f.wyId ?? i}`)
     );
-    const rowKey = String(f.matchId ?? f.wyId ?? i);
     const players = f.playersInMatch ?? [];
     if (players.length === 0) {
       const assign = fixtureAssignments[rowKey] ?? {};
@@ -220,7 +229,8 @@ function escapeCsvCell(val: string): string {
 function fixturesToCsv(
   fixtures: Fixture[],
   fixtureAssignments: Record<string, FixtureAssignment>,
-  assignableUsers: AssignableUser[]
+  assignableUsers: AssignableUser[],
+  deliveryDateOverrides: Record<string, string>
 ): string {
   const userDisplay = (id: string): string => {
     if (!id) return "";
@@ -287,8 +297,9 @@ function fixturesToCsv(
     const gwEnd = f.gameweekEndDate
       ? new Date(f.gameweekEndDate).toLocaleDateString("it-IT")
       : "";
-    const deliveryDateStr = getDeliveryDate(f)
-      ? new Date(getDeliveryDate(f) + "T12:00:00").toLocaleDateString("it-IT")
+    const effectiveDelivery = getEffectiveDeliveryDate(rowKey, f, deliveryDateOverrides);
+    const deliveryDateStr = effectiveDelivery
+      ? new Date(effectiveDelivery + "T12:00:00").toLocaleDateString("it-IT")
       : "";
     const matchId = String(f.matchId ?? f.wyId ?? "");
     const players = f.playersInMatch ?? [];
@@ -486,6 +497,7 @@ export default function PostMatchPage() {
   const [calendarPopupFixture, setCalendarPopupFixture] = useState<Fixture | null>(null);
   const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
   const [fixtureAssignments, setFixtureAssignments] = useState<Record<string, FixtureAssignment>>({});
+  const [deliveryDateOverrides, setDeliveryDateOverrides] = useState<Record<string, string>>({});
   const selectedPlayerIds = selectedPlayers.map((p) => p.wyId ?? p.id).filter((id): id is number => id != null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const calendarExportRef = useRef<HTMLDivElement>(null);
@@ -898,7 +910,7 @@ export default function PostMatchPage() {
                     <button
                       type="button"
                       onClick={() => {
-                        const csv = fixturesToCsv(fixtures, fixtureAssignments, assignableUsers);
+                        const csv = fixturesToCsv(fixtures, fixtureAssignments, assignableUsers, deliveryDateOverrides);
                         const base = "partite-post-match";
                         const date = new Date().toISOString().slice(0, 10);
                         downloadCsv(csv, `${base}-${date}.csv`);
@@ -1113,7 +1125,7 @@ export default function PostMatchPage() {
                   })()}
 
                   {viewMode === "gantt" && (() => {
-                    const ganttTasks = buildGanttTasks(fixtures, fixtureAssignments, assignableUsers);
+                    const ganttTasks = buildGanttTasks(fixtures, fixtureAssignments, assignableUsers, deliveryDateOverrides);
                     if (ganttTasks.length === 0) {
                       return (
                         <div className="mt-6 text-sm text-gray-500">
@@ -1430,10 +1442,23 @@ export default function PostMatchPage() {
                               <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap align-middle">
                                 {gameweekRange}
                               </td>
-                              <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap align-middle">
-                                {getDeliveryDate(f)
-                                  ? new Date(getDeliveryDate(f) + "T12:00:00").toLocaleDateString("it-IT")
-                                  : "—"}
+                              <td className="px-5 py-3 align-middle">
+                                {(() => {
+                                  const effective = getEffectiveDeliveryDate(rowKey, f, deliveryDateOverrides);
+                                  return (
+                                    <input
+                                      type="date"
+                                      value={effective || ""}
+                                      onChange={(e) => {
+                                        const v = e.target.value;
+                                        setDeliveryDateOverrides((prev) =>
+                                          v ? { ...prev, [rowKey]: v } : (() => { const { [rowKey]: _, ...rest } = prev; return rest; })()
+                                        );
+                                      }}
+                                      className="block w-full min-w-[120px] rounded border border-gray-300 px-2 py-1 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                  );
+                                })()}
                               </td>
                               <td className="px-5 py-3 align-top">
                                 <div className="flex flex-col gap-2">
