@@ -135,6 +135,103 @@ function downloadCsv(csv: string, filename: string) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/** Group fixtures by local date (YYYY-MM-DD) for calendar view */
+function groupFixturesByDay(fixtures: Fixture[]): Map<string, Fixture[]> {
+  const byDay = new Map<string, Fixture[]>();
+  for (const f of fixtures) {
+    const raw = f.date ?? f.dateutc ?? "";
+    const d = new Date(raw);
+    const key = Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+    const list = byDay.get(key) ?? [];
+    list.push(f);
+    byDay.set(key, list);
+  }
+  byDay.forEach((list) => list.sort((a, b) => new Date(a.date ?? a.dateutc ?? 0).getTime() - new Date(b.date ?? b.dateutc ?? 0).getTime()));
+  return byDay;
+}
+
+/** Monday = 1 in getDay(); return Monday of the week containing d */
+function getMondayOfWeek(d: Date): Date {
+  const out = new Date(d);
+  const day = out.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  out.setDate(out.getDate() + diff);
+  return out;
+}
+
+/** Build calendar weeks (rows) for Notion-style grid: each row = 7 days Mon–Sun */
+function buildCalendarWeeks(
+  byDay: Map<string, Fixture[]>
+): { dayKey: string; dayNum: number; month: number; year: number }[][] {
+  const keys = Array.from(byDay.keys()).filter(Boolean).sort();
+  if (keys.length === 0) return [];
+  const minDate = new Date(keys[0] + "T12:00:00");
+  const maxDate = new Date(keys[keys.length - 1] + "T12:00:00");
+  const start = getMondayOfWeek(minDate);
+  const end = new Date(maxDate);
+  end.setDate(end.getDate() + (6 - (maxDate.getDay() + 6) % 7));
+  const weeks: { dayKey: string; dayNum: number; month: number; year: number }[][] = [];
+  let curr = new Date(start);
+  while (curr <= end) {
+    const row: { dayKey: string; dayNum: number; month: number; year: number }[] = [];
+    for (let c = 0; c < 7; c++) {
+      const key = curr.toISOString().slice(0, 10);
+      row.push({
+        dayKey: key,
+        dayNum: curr.getDate(),
+        month: curr.getMonth(),
+        year: curr.getFullYear(),
+      });
+      curr.setDate(curr.getDate() + 1);
+    }
+    weeks.push(row);
+  }
+  return weeks;
+}
+
+/** Build calendar grouped by month for horizontal scroll: each month has its own grid */
+function buildCalendarByMonth(
+  byDay: Map<string, Fixture[]>
+): { monthKey: string; monthLabel: string; weeks: { dayKey: string; dayNum: number; month: number; year: number }[][] }[] {
+  const keys = Array.from(byDay.keys()).filter(Boolean).sort();
+  if (keys.length === 0) return [];
+  const monthSet = new Set<string>();
+  for (const k of keys) {
+    monthSet.add(k.slice(0, 7));
+  }
+  const months = Array.from(monthSet).sort();
+  const result: { monthKey: string; monthLabel: string; weeks: { dayKey: string; dayNum: number; month: number; year: number }[][] }[] = [];
+  for (const monthKey of months) {
+    const [y, m] = monthKey.split("-").map(Number);
+    const firstDay = new Date(y, m - 1, 1);
+    const lastDay = new Date(y, m, 0);
+    const start = getMondayOfWeek(firstDay);
+    const end = new Date(lastDay);
+    end.setDate(end.getDate() + (6 - (lastDay.getDay() + 6) % 7));
+    const weeks: { dayKey: string; dayNum: number; month: number; year: number }[][] = [];
+    let curr = new Date(start);
+    while (curr <= end) {
+      const row: { dayKey: string; dayNum: number; month: number; year: number }[] = [];
+      for (let c = 0; c < 7; c++) {
+        const key = curr.toISOString().slice(0, 10);
+        row.push({
+          dayKey: key,
+          dayNum: curr.getDate(),
+          month: curr.getMonth(),
+          year: curr.getFullYear(),
+        });
+        curr.setDate(curr.getDate() + 1);
+      }
+      weeks.push(row);
+    }
+    const monthLabel = firstDay.toLocaleDateString("it-IT", { month: "long", year: "numeric" });
+    result.push({ monthKey, monthLabel, weeks });
+  }
+  return result;
+}
+
+const WEEKDAY_LABELS = ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"];
 function playerImageUrl(p: Player): string | null {
   const url = p.imageDataURL;
   return url && typeof url === "string" ? url : null;
@@ -163,12 +260,11 @@ export default function PostMatchPage() {
   const [expandedMatchId, setExpandedMatchId] = useState<number | null>(null);
   const [dateFrom, setDateFrom] = useState(() => defaultDateFrom());
   const [dateTo, setDateTo] = useState(() => defaultDateTo());
-  const [detailsByKey, setDetailsByKey] = useState<
-    Record<string, { playerDetails: unknown; teamDetails: unknown }>
-  >({});
+  const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
+  const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
+  const [calendarPopupFixture, setCalendarPopupFixture] = useState<Fixture | null>(null);
   const selectedPlayerIds = selectedPlayers.map((p) => p.wyId ?? p.id).filter((id): id is number => id != null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const detailsFetchedRef = useRef<Set<string>>(new Set());
 
   const runSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -214,43 +310,20 @@ export default function PostMatchPage() {
   }, []);
 
   useEffect(() => {
-    if (expandedMatchId == null || fixtures.length === 0) return;
-    const fixture = fixtures.find(
-      (f) => (f.matchId ?? f.wyId) === expandedMatchId
-    );
-    const playersInMatch = fixture?.playersInMatch ?? [];
-    for (const p of playersInMatch) {
-      const pid = p.wyId ?? p.id;
-      if (pid == null) continue;
-      const key = `${expandedMatchId}-${pid}`;
-      if (detailsByKey[key] || detailsFetchedRef.current.has(key)) continue;
-      detailsFetchedRef.current.add(key);
-      (async () => {
-        try {
-          const playerRes = await fetch(
-            `/api/wyscout/players/${pid}?details=currentTeam,playerDetails`
-          ).then((r) => r.json());
-          const teamWyId = (playerRes as { currentTeam?: { wyId?: number } })
-            ?.currentTeam?.wyId;
-          let teamDetails: unknown = null;
-          if (teamWyId != null) {
-            teamDetails = await fetch(
-              `/api/wyscout/teams/${teamWyId}?details=teamDetails`
-            ).then((r) => r.json());
-          }
-          setDetailsByKey((prev) => ({
-            ...prev,
-            [key]: { playerDetails: playerRes, teamDetails },
-          }));
-        } catch {
-          setDetailsByKey((prev) => ({
-            ...prev,
-            [key]: { playerDetails: null, teamDetails: null },
-          }));
-        }
-      })();
+    if (fixtures.length > 0 && viewMode === "calendar") {
+      setCalendarMonthKey(null);
     }
-  }, [expandedMatchId, fixtures]);
+  }, [fixtures.length, viewMode]);
+
+  useEffect(() => {
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === "Escape") setCalendarPopupFixture(null);
+    }
+    if (calendarPopupFixture) {
+      document.addEventListener("keydown", handleEscape);
+      return () => document.removeEventListener("keydown", handleEscape);
+    }
+  }, [calendarPopupFixture]);
 
   async function enrichPlayerWithImages(playerId: number) {
     try {
@@ -491,7 +564,31 @@ export default function PostMatchPage() {
 
               {fixtures.length > 0 && (
                 <>
-                  <div className="mt-4 flex items-center gap-2">
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <div className="flex rounded-md border border-gray-300 bg-white p-0.5 shadow-sm">
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("table")}
+                        className={`rounded px-3 py-1.5 text-sm font-medium ${
+                          viewMode === "table"
+                            ? "bg-indigo-600 text-white"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Tabella
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("calendar")}
+                        className={`rounded px-3 py-1.5 text-sm font-medium ${
+                          viewMode === "calendar"
+                            ? "bg-indigo-600 text-white"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Calendario
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => {
@@ -505,6 +602,177 @@ export default function PostMatchPage() {
                       Esporta CSV
                     </button>
                   </div>
+
+                  {viewMode === "calendar" && (() => {
+                    const byDay = groupFixturesByDay(fixtures);
+                    const monthsData = buildCalendarByMonth(byDay);
+                    if (monthsData.length === 0) {
+                      return (
+                        <div className="mt-6 text-sm text-gray-500">
+                          Nessuna partita da mostrare nel calendario.
+                        </div>
+                      );
+                    }
+                    const currentMonth =
+                      monthsData.find((m) => m.monthKey === calendarMonthKey) ?? monthsData[0];
+                    const currentIndex = monthsData.indexOf(currentMonth);
+                    const canPrev = currentIndex > 0;
+                    const canNext = currentIndex < monthsData.length - 1;
+
+                    return (
+                      <div className="mt-6">
+                        <div className="flex items-center justify-between gap-4 mb-4">
+                          <button
+                            type="button"
+                            onClick={() => setCalendarMonthKey(monthsData[currentIndex - 1].monthKey)}
+                            disabled={!canPrev}
+                            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label="Mese precedente"
+                          >
+                            ← Precedente
+                          </button>
+                          <h3 className="text-lg font-semibold text-gray-900 capitalize">
+                            {currentMonth.monthLabel}
+                          </h3>
+                          <button
+                            type="button"
+                            onClick={() => setCalendarMonthKey(monthsData[currentIndex + 1].monthKey)}
+                            disabled={!canNext}
+                            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                            aria-label="Mese successivo"
+                          >
+                            Successivo →
+                          </button>
+                        </div>
+                        <section className="w-full">
+                          <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
+                                <thead>
+                                  <tr>
+                                    {WEEKDAY_LABELS.map((w) => (
+                                      <th
+                                        key={w}
+                                        className="border border-gray-200 bg-gray-50 px-1.5 py-1.5 text-center text-xs font-medium uppercase text-gray-500"
+                                      >
+                                        {w}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {currentMonth.weeks.map((row, rowIdx) => (
+                                    <tr key={rowIdx}>
+                                      {row.map(({ dayKey, dayNum, month, year }) => {
+                                        const dayFixtures = byDay.get(dayKey) ?? [];
+                                        const isThisMonth = `${year}-${String(month + 1).padStart(2, "0")}` === currentMonth.monthKey;
+                                        return (
+                                          <td
+                                            key={dayKey}
+                                            className={`align-top border border-gray-200 p-1 min-h-[120px] ${isThisMonth ? "bg-white" : "bg-gray-50/80"}`}
+                                          >
+                                            <div className="flex items-center justify-between gap-0.5 mb-1">
+                                              <span
+                                                className={`text-xs font-medium ${
+                                                  dayFixtures.length > 0
+                                                    ? "text-indigo-600"
+                                                    : isThisMonth
+                                                      ? "text-gray-700"
+                                                      : "text-gray-400"
+                                                }`}
+                                              >
+                                                {dayNum}
+                                              </span>
+                                            </div>
+                                            <div className="space-y-1.5">
+                                              {dayFixtures.map((f, i) => {
+                                                const dateStr = f.date ?? f.dateutc ?? "";
+                                                const labelRaw =
+                                                  f.label ??
+                                                  (f.homeTeam?.name && f.awayTeam?.name
+                                                    ? `${f.homeTeam.name} – ${f.awayTeam.name}`
+                                                    : f.homeTeamId && f.awayTeamId
+                                                      ? `Team ${f.homeTeamId} – Team ${f.awayTeamId}`
+                                                      : "");
+                                                const label = stripScoreFromLabel(String(labelRaw ?? ""));
+                                                const comp = f.competitionName ?? f.competition?.name ?? "";
+                                                const gameweek = f.gameweek != null ? String(f.gameweek) : "—";
+                                                const compGw = comp ? `${comp} GW${gameweek}` : gameweek !== "—" ? `GW${gameweek}` : "—";
+                                                const startShort = dateStr
+                                                  ? new Date(dateStr).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+                                                  : "—";
+                                                const endShort = f.gameweekEndDate
+                                                  ? new Date(f.gameweekEndDate).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+                                                  : "—";
+                                                const dateRange = endShort !== "—" ? `${startShort} - ${endShort}` : startShort;
+                                                return (
+                                                  <div
+                                                    key={f.matchId ?? f.wyId ?? i}
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    onClick={() => {
+                                                      setCalendarPopupFixture(f);
+                                                      setExpandedMatchId((f.matchId ?? f.wyId) ?? null);
+                                                    }}
+                                                    onKeyDown={(e) => {
+                                                      if (e.key === "Enter" || e.key === " ") {
+                                                        e.preventDefault();
+                                                        setCalendarPopupFixture(f);
+                                                        setExpandedMatchId((f.matchId ?? f.wyId) ?? null);
+                                                      }
+                                                    }}
+                                                    className="rounded border border-gray-200 bg-white p-1.5 shadow-sm hover:border-gray-300 hover:ring-2 hover:ring-indigo-500/50 cursor-pointer text-left"
+                                                  >
+                                                    <div className="flex items-start gap-1.5">
+                                                      <div className="flex shrink-0 -space-x-1.5">
+                                                        {(f.playersInMatch ?? []).map((p) => {
+                                                          const pl = selectedPlayers.find((s) => (s.wyId ?? s.id) === (p.wyId ?? p.id)) ?? p;
+                                                          const pImg = playerImageUrl(pl);
+                                                          return (
+                                                            <span
+                                                              key={pl.wyId ?? pl.id}
+                                                              className="inline-block w-6 h-6 rounded-full border border-white bg-gray-100 overflow-hidden ring-1 ring-gray-200"
+                                                              title={[pl.firstName, pl.lastName].filter(Boolean).join(" ")}
+                                                            >
+                                                              {pImg ? (
+                                                                <img
+                                                                  src={pImg}
+                                                                  alt=""
+                                                                  className="w-full h-full object-cover"
+                                                                  onError={(e) => {
+                                                                    e.currentTarget.style.display = "none";
+                                                                  }}
+                                                                />
+                                                              ) : (
+                                                                <span className="w-full h-full flex items-center justify-center text-[9px] font-medium text-gray-600">
+                                                                  {[pl.firstName, pl.lastName].filter(Boolean).join(" ").slice(0, 2).toUpperCase()}
+                                                                </span>
+                                                              )}
+                                                            </span>
+                                                          );
+                                                        })}
+                                                      </div>
+                                                      <div className="min-w-0 flex-1">
+                                                        <p className="font-medium text-gray-900 text-[11px] leading-tight line-clamp-2">{label}</p>
+                                                        <p className="mt-0.5 text-[9px] text-gray-600 truncate">{compGw}</p>
+                                                        <p className="text-[9px] text-gray-500">{dateRange}</p>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                        </section>
+                      </div>
+                    );
+                  })()}
+
+                  {viewMode === "table" && (
                   <div className="mt-4 overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead>
@@ -617,7 +885,9 @@ export default function PostMatchPage() {
                                           </span>
                                         )}
                                         {tImg ? (
-                                          <img src={tImg} alt="" className="w-6 h-6 rounded object-cover bg-gray-100" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                          <span className="inline-flex w-6 h-6 shrink-0 items-center justify-center overflow-hidden rounded bg-gray-100">
+                                            <img src={tImg} alt="" className="max-h-6 max-w-6 w-auto h-auto object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                                          </span>
                                         ) : (
                                           <span className="w-6 h-6 rounded bg-gray-200 flex items-center justify-center text-[10px]" title={(pl.currentTeam as { name?: string })?.name ?? ""}>?</span>
                                         )}
@@ -712,65 +982,6 @@ export default function PostMatchPage() {
                                         </table>
                                       )}
                                     </div>
-                                    <div className="mt-4">
-                                      <p className="mb-2 font-medium text-gray-900">
-                                        Dettagli giocatore e squadra
-                                      </p>
-                                      {(f.playersInMatch ?? []).map((pl) => {
-                                        const pid = pl.wyId ?? pl.id;
-                                        const key =
-                                          pid != null
-                                            ? `${f.matchId ?? f.wyId}-${pid}`
-                                            : "";
-                                        const details = key ? detailsByKey[key] : null;
-                                        const name =
-                                          [pl.firstName, pl.lastName]
-                                            .filter(Boolean)
-                                            .join(" ") || "—";
-                                        return (
-                                          <div
-                                            key={pid}
-                                            className="mb-4 rounded-lg border border-gray-200 bg-white overflow-hidden"
-                                          >
-                                            <p className="px-4 py-2 bg-gray-50 font-medium text-gray-800 border-b border-gray-200">
-                                              {name}
-                                            </p>
-                                            {!details ? (
-                                              <p className="px-4 py-2 text-sm text-gray-500">
-                                                Caricamento...
-                                              </p>
-                                            ) : (
-                                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-                                                <div>
-                                                  <p className="text-xs font-semibold uppercase text-gray-500 mb-1">
-                                                    playerDetails
-                                                  </p>
-                                                  <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-64 border border-gray-100">
-                                                    {JSON.stringify(
-                                                      details.playerDetails,
-                                                      null,
-                                                      2
-                                                    )}
-                                                  </pre>
-                                                </div>
-                                                <div>
-                                                  <p className="text-xs font-semibold uppercase text-gray-500 mb-1">
-                                                    teamDetails
-                                                  </p>
-                                                  <pre className="text-xs bg-gray-50 p-3 rounded overflow-auto max-h-64 border border-gray-100">
-                                                    {JSON.stringify(
-                                                      details.teamDetails,
-                                                      null,
-                                                      2
-                                                    )}
-                                                  </pre>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
                                   </div>
                                 </td>
                               </tr>
@@ -781,12 +992,132 @@ export default function PostMatchPage() {
                     </tbody>
                   </table>
                 </div>
+                  )}
                 </>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {calendarPopupFixture && (() => {
+        const f = calendarPopupFixture;
+        const gameweekMatchesList = [...(f.gameweekMatches ?? [])].sort(
+          (a, b) =>
+            new Date(a.dateutc ?? a.date ?? 0).getTime() -
+            new Date(b.dateutc ?? b.date ?? 0).getTime()
+        );
+        const playerMatchTime = new Date((f.dateutc ?? f.date) ?? 0).getTime();
+        const label = stripScoreFromLabel(
+          String(
+            f.label ??
+              (f.homeTeam?.name && f.awayTeam?.name
+                ? `${f.homeTeam.name} – ${f.awayTeam.name}`
+                : f.homeTeamId && f.awayTeamId
+                  ? `Team ${f.homeTeamId} – Team ${f.awayTeamId}`
+                  : "—")
+          )
+        );
+        const comp = f.competitionName ?? f.competition?.name ?? "";
+        const gameweek = f.gameweek != null ? String(f.gameweek) : "—";
+        const compGw = comp ? `${comp} GW${gameweek}` : gameweek !== "—" ? `GW${gameweek}` : "—";
+        const dateStr = f.date ?? f.dateutc ?? "";
+        const startShort = dateStr
+          ? new Date(dateStr).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+          : "—";
+        const endShort = f.gameweekEndDate
+          ? new Date(f.gameweekEndDate).toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" })
+          : "—";
+        const dateRange = endShort !== "—" ? `${startShort} - ${endShort}` : startShort;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onClick={() => setCalendarPopupFixture(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-popup-title"
+          >
+            <div
+              className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-4 px-4 py-4 border-b border-gray-200 shrink-0">
+                <div className="flex shrink-0 -space-x-2">
+                  {(f.playersInMatch ?? []).map((p) => {
+                    const pl = selectedPlayers.find((s) => (s.wyId ?? s.id) === (p.wyId ?? p.id)) ?? p;
+                    const pImg = playerImageUrl(pl);
+                    return (
+                      <span
+                        key={pl.wyId ?? pl.id}
+                        className="inline-block w-10 h-10 rounded-full border-2 border-white bg-gray-100 overflow-hidden ring-1 ring-gray-200"
+                        title={[pl.firstName, pl.lastName].filter(Boolean).join(" ")}
+                      >
+                        {pImg ? (
+                          <img src={pImg} alt="" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                        ) : (
+                          <span className="w-full h-full flex items-center justify-center text-xs font-medium text-gray-600">
+                            {[pl.firstName, pl.lastName].filter(Boolean).join(" ").slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                      </span>
+                    );
+                  })}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h2 id="calendar-popup-title" className="text-lg font-semibold text-gray-900">
+                    {label}
+                  </h2>
+                  <p className="mt-0.5 text-sm text-gray-600">{compGw}</p>
+                  <p className="mt-0.5 text-sm text-gray-500">{dateRange}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCalendarPopupFixture(null)}
+                  className="rounded p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700 shrink-0"
+                  aria-label="Chiudi"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="p-4 overflow-auto text-sm text-black">
+                <p className="mb-2 font-medium">Match del turno ({gameweekMatchesList.length})</p>
+                <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+                  {gameweekMatchesList.length === 0 ? (
+                    <p className="px-4 py-3 text-gray-500">Nessun match</p>
+                  ) : (
+                    <table className="min-w-full text-left">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="px-4 py-2 font-medium text-gray-700">Partita</th>
+                          <th className="px-4 py-2 font-medium text-gray-700 whitespace-nowrap">Data</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gameweekMatchesList.map((m, mi) => {
+                          const mDate = m.dateutc ?? m.date ?? "";
+                          const mDateFmt = mDate ? new Date(mDate).toLocaleDateString("it-IT") : "—";
+                          const mTime = new Date(mDate || 0).getTime();
+                          const diffDays = Number.isNaN(mTime)
+                            ? 0
+                            : Math.floor((mTime - playerMatchTime) / (1000 * 60 * 60 * 24));
+                          const bgClass =
+                            diffDays <= 0 ? "bg-green-100" : diffDays <= 2 ? "bg-yellow-100" : "bg-red-100";
+                          return (
+                            <tr key={m.matchId ?? mi} className={`border-b border-gray-100 last:border-0 ${bgClass}`}>
+                              <td className="px-4 py-2">{stripScoreFromLabel(String(m.label ?? "")) || "—"}</td>
+                              <td className="px-4 py-2 whitespace-nowrap">{mDateFmt}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
