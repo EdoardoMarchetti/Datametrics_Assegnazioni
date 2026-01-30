@@ -244,6 +244,13 @@ export async function GET(
         roundName: roundId ? roundMap[roundId] : undefined,
         gameweekStartDate: range?.start,
         gameweekEndDate: range?.end,
+        deliveryDate: range?.end
+          ? (() => {
+              const d = new Date(range.end + "T12:00:00");
+              d.setDate(d.getDate() + 1);
+              return d.toISOString().slice(0, 10);
+            })()
+          : undefined,
         seasonId: seasonId ?? undefined,
         roundId: roundId ?? undefined,
         gameweekMatches,

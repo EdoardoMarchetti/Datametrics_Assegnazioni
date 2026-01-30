@@ -6186,8 +6186,193 @@
             "scoreET": 0,
             "scoreP": 0,
             "coachId": 0,
-            "hasFormation": 0,
-            "formation": null
+            "hasFormation": 1,
+            "formation": {
+              "lineup": [],
+              "bench": [
+                {
+                  "playerId": 1163244,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 25,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 1195947,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 44,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 256992,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 11,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 960461,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 77,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 558193,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 0,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 553652,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 13,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 740722,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 29,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 696875,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 66,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 742228,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 19,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 892399,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 55,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 938633,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 2,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 1236772,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 24,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 491547,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 1,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 765910,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 17,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 789703,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 15,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 892434,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 5,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 267134,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 10,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 1101935,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 28,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 803349,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 6,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 514193,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 23,
+                  "assists": "0"
+                }
+              ],
+              "substitutions": []
+            }
           },
           "16491": {
             "teamId": 16491,
@@ -6197,8 +6382,193 @@
             "scoreET": 0,
             "scoreP": 0,
             "coachId": 0,
-            "hasFormation": 0,
-            "formation": null
+            "hasFormation": 1,
+            "formation": {
+              "lineup": [],
+              "bench": [
+                {
+                  "playerId": 892387,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 12,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 856036,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 3,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 622737,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 11,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 374069,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 13,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 337835,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 17,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 1101964,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 87,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 642246,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 8,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 1278261,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 88,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 134375,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 22,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 228748,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 7,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 504441,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 98,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 960628,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 10,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 1014062,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 15,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 490527,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 1,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 600185,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 18,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 414234,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 4,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 623719,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 14,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 642248,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 20,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 329686,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 94,
+                  "assists": "0"
+                },
+                {
+                  "playerId": 54783,
+                  "goals": "0",
+                  "ownGoals": "0",
+                  "yellowCards": "0",
+                  "redCards": "0",
+                  "shirtNumber": 93,
+                  "assists": "0"
+                }
+              ],
+              "substitutions": []
+            }
           }
         },
         "venue": null,

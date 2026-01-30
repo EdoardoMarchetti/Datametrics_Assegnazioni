@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 
-const DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = 350;
+const MIN_SEARCH_LENGTH = 2;
 
 type Player = {
   wyId?: number;
@@ -47,6 +48,8 @@ type Fixture = {
   roundName?: string;
   gameweekStartDate?: string;
   gameweekEndDate?: string;
+  /** Data di consegna; default = giorno dopo fine gameweek */
+  deliveryDate?: string;
   seasonId?: string;
   roundId?: string;
   gameweekMatches?: GameweekMatch[];
@@ -57,9 +60,153 @@ type Fixture = {
   [key: string]: unknown;
 };
 
+type AssignableUser = {
+  id: string;
+  email: string | null;
+  full_name: string | null;
+  role: string | null;
+};
+
+type FixtureAssignment = {
+  reportUserId: string;
+  videoEnabled: boolean;
+  videoUserId: string | null;
+};
+
 /** Remove trailing ", 0-0" (or any score) from match label */
 function stripScoreFromLabel(label: string): string {
   return label.replace(/,\s*\d+-\d+\s*$/, "").trim();
+}
+
+/** Data di consegna: deliveryDate se presente, altrimenti giorno dopo fine gameweek */
+function getDeliveryDate(f: Fixture): string {
+  if (f.deliveryDate) return f.deliveryDate;
+  if (f.gameweekEndDate) {
+    const d = new Date(f.gameweekEndDate + "T12:00:00");
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+  return "";
+}
+
+type GanttTask = {
+  userId: string;
+  userName: string;
+  start: Date;
+  end: Date;
+  label: string;
+  type: "report" | "video";
+  matchId: number;
+  playerLabel?: string;
+  /** Chiave in fixtureAssignments (rowKey o rowKey-playerId) per aggiornare assegnazione al drop */
+  assignmentKey: string;
+};
+
+function buildGanttTasks(
+  fixtures: Fixture[],
+  fixtureAssignments: Record<string, FixtureAssignment>,
+  assignableUsers: AssignableUser[]
+): GanttTask[] {
+  const userDisplay = (id: string): string => {
+    if (!id) return "";
+    const u = assignableUsers.find((x) => x.id === id);
+    return u ? (u.full_name ?? u.email ?? id) : id;
+  };
+  const tasks: GanttTask[] = [];
+  for (let i = 0; i < fixtures.length; i++) {
+    const f = fixtures[i];
+    const matchDateStr = f.date ?? f.dateutc;
+    const matchDate = matchDateStr ? new Date(matchDateStr) : null;
+    let endDate: Date | null = null;
+    const deliveryDateStr = getDeliveryDate(f);
+    if (deliveryDateStr) {
+      endDate = new Date(deliveryDateStr + "T23:59:59");
+    } else if (f.gameweekEndDate) {
+      const d = new Date(f.gameweekEndDate + "T12:00:00");
+      d.setDate(d.getDate() + 1);
+      d.setHours(23, 59, 59, 999);
+      endDate = d;
+    } else if (matchDate) {
+      const d = new Date(matchDate);
+      const day = d.getDay();
+      const toSunday = day === 0 ? 0 : 7 - day;
+      d.setDate(d.getDate() + toSunday + 1);
+      d.setHours(23, 59, 59, 999);
+      endDate = d;
+    }
+    if (!matchDate || !endDate || Number.isNaN(matchDate.getTime()) || Number.isNaN(endDate.getTime())) continue;
+    const matchLabel = stripScoreFromLabel(
+      f.label ?? (f.homeTeam?.name && f.awayTeam?.name ? `${f.homeTeam.name} – ${f.awayTeam.name}` : `Match ${f.matchId ?? f.wyId ?? i}`)
+    );
+    const rowKey = String(f.matchId ?? f.wyId ?? i);
+    const players = f.playersInMatch ?? [];
+    if (players.length === 0) {
+      const assign = fixtureAssignments[rowKey] ?? {};
+      const reportUserId = assign.reportUserId;
+      const videoUserId = assign.videoUserId;
+      if (reportUserId) {
+        tasks.push({
+          userId: reportUserId,
+          userName: userDisplay(reportUserId),
+          start: new Date(matchDate.getTime()),
+          end: endDate,
+          label: matchLabel,
+          type: "report",
+          matchId: f.matchId ?? f.wyId ?? i,
+          assignmentKey: rowKey,
+        });
+      }
+      if (videoUserId && videoUserId !== reportUserId) {
+        tasks.push({
+          userId: videoUserId,
+          userName: userDisplay(videoUserId),
+          start: new Date(matchDate.getTime()),
+          end: endDate,
+          label: matchLabel,
+          type: "video",
+          matchId: f.matchId ?? f.wyId ?? i,
+          assignmentKey: rowKey,
+        });
+      }
+    } else {
+      for (const p of players) {
+        const pid = p.wyId ?? p.id;
+        const playerLabel = (p.shortName ?? ([p.firstName, p.lastName].filter(Boolean).join(" ") || (pid != null ? `#${pid}` : ""))) as string;
+        const key = pid != null ? `${rowKey}-${pid}` : rowKey;
+        const assign = fixtureAssignments[key] ?? {};
+        const reportUserId = assign.reportUserId;
+        const videoUserId = assign.videoUserId;
+        const suffix = playerLabel ? ` (${playerLabel})` : "";
+        if (reportUserId) {
+          tasks.push({
+            userId: reportUserId,
+            userName: userDisplay(reportUserId),
+            start: new Date(matchDate.getTime()),
+            end: endDate,
+            label: matchLabel + suffix,
+            type: "report",
+            matchId: f.matchId ?? f.wyId ?? i,
+            playerLabel,
+            assignmentKey: key,
+          });
+        }
+        if (videoUserId && videoUserId !== reportUserId) {
+          tasks.push({
+            userId: videoUserId,
+            userName: userDisplay(videoUserId),
+            start: new Date(matchDate.getTime()),
+            end: endDate,
+            label: matchLabel + suffix,
+            type: "video",
+            matchId: f.matchId ?? f.wyId ?? i,
+            playerLabel,
+            assignmentKey: key,
+          });
+        }
+      }
+    }
+  }
+  return tasks;
 }
 
 function escapeCsvCell(val: string): string {
@@ -70,7 +217,24 @@ function escapeCsvCell(val: string): string {
   return s;
 }
 
-function fixturesToCsv(fixtures: Fixture[]): string {
+function fixturesToCsv(
+  fixtures: Fixture[],
+  fixtureAssignments: Record<string, FixtureAssignment>,
+  assignableUsers: AssignableUser[]
+): string {
+  const userDisplay = (id: string): string => {
+    if (!id) return "";
+    const u = assignableUsers.find((x) => x.id === id);
+    return u ? (u.full_name ?? u.email ?? id) : id;
+  };
+  const userIds = new Set<string>();
+  Object.values(fixtureAssignments).forEach((a) => {
+    if (a.reportUserId) userIds.add(a.reportUserId);
+    if (a.videoUserId) userIds.add(a.videoUserId);
+  });
+  const sortedUserIds = Array.from(userIds).sort((a, b) =>
+    userDisplay(a).localeCompare(userDisplay(b), "it", { sensitivity: "base" })
+  );
   const header = [
     "Giocatore",
     "Data",
@@ -79,9 +243,20 @@ function fixturesToCsv(fixtures: Fixture[]): string {
     "Gameweek",
     "Gameweek inizio",
     "Gameweek fine",
+    "Data di consegna",
     "Match ID",
+    ...sortedUserIds.map((id) => userDisplay(id) || id),
   ];
-  const rows = fixtures.map((f) => {
+  const roleForUser = (assign: FixtureAssignment, userId: string): string => {
+    const isReport = assign.reportUserId === userId;
+    const isVideo = assign.videoUserId === userId;
+    if (isReport) return "report";
+    if (isVideo) return "video";
+    return "";
+  };
+  const rows: string[][] = [];
+  fixtures.forEach((f, i) => {
+    const rowKey = String(f.matchId ?? f.wyId ?? i);
     const dateStr = f.date ?? f.dateutc ?? "";
     const dateFormatted = dateStr
       ? new Date(dateStr).toLocaleDateString("it-IT")
@@ -112,16 +287,52 @@ function fixturesToCsv(fixtures: Fixture[]): string {
     const gwEnd = f.gameweekEndDate
       ? new Date(f.gameweekEndDate).toLocaleDateString("it-IT")
       : "";
-    return [
-      (f.playerNames ?? []).join("; "),
-      dateFormatted,
-      label,
-      parts.join(" / "),
-      gameweek,
-      gwStart,
-      gwEnd,
-      String(f.matchId ?? f.wyId ?? ""),
-    ].map(escapeCsvCell);
+    const deliveryDateStr = getDeliveryDate(f)
+      ? new Date(getDeliveryDate(f) + "T12:00:00").toLocaleDateString("it-IT")
+      : "";
+    const matchId = String(f.matchId ?? f.wyId ?? "");
+    const players = f.playersInMatch ?? [];
+    if (players.length === 0) {
+      const assign = fixtureAssignments[rowKey] ?? {};
+      const userCols = sortedUserIds.map((uid) => roleForUser(assign, uid));
+      rows.push(
+        [
+          "",
+          dateFormatted,
+          label,
+          parts.join(" / "),
+          gameweek,
+          gwStart,
+          gwEnd,
+          deliveryDateStr,
+          matchId,
+          ...userCols,
+        ].map(String).map(escapeCsvCell)
+      );
+    } else {
+      for (const p of players) {
+        const pid = p.wyId ?? p.id;
+        const playerLabel =
+          (p.shortName ?? ([p.firstName, p.lastName].filter(Boolean).join(" ") || (pid != null ? `#${pid}` : ""))) as string;
+        const key = pid != null ? `${rowKey}-${pid}` : rowKey;
+        const assign = fixtureAssignments[key] ?? {};
+        const userCols = sortedUserIds.map((uid) => roleForUser(assign, uid));
+        rows.push(
+          [
+            playerLabel,
+            dateFormatted,
+            label,
+            parts.join(" / "),
+            gameweek,
+            gwStart,
+            gwEnd,
+            deliveryDateStr,
+            matchId,
+            ...userCols,
+          ].map(String).map(escapeCsvCell)
+        );
+      }
+    }
   });
   return [header.map(escapeCsvCell).join(","), ...rows.map((r) => r.join(","))].join("\n");
 }
@@ -270,37 +481,111 @@ export default function PostMatchPage() {
   const [expandedMatchId, setExpandedMatchId] = useState<number | null>(null);
   const [dateFrom, setDateFrom] = useState(() => defaultDateFrom());
   const [dateTo, setDateTo] = useState(() => defaultDateTo());
-  const [viewMode, setViewMode] = useState<"table" | "calendar">("table");
+  const [viewMode, setViewMode] = useState<"table" | "calendar" | "gantt">("table");
   const [calendarMonthKey, setCalendarMonthKey] = useState<string | null>(null);
   const [calendarPopupFixture, setCalendarPopupFixture] = useState<Fixture | null>(null);
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([]);
+  const [fixtureAssignments, setFixtureAssignments] = useState<Record<string, FixtureAssignment>>({});
   const selectedPlayerIds = selectedPlayers.map((p) => p.wyId ?? p.id).filter((id): id is number => id != null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const calendarExportRef = useRef<HTMLDivElement>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const [calendarExporting, setCalendarExporting] = useState(false);
+  const [ganttTooltip, setGanttTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [hoveredGanttBar, setHoveredGanttBar] = useState<string | null>(null);
+  const [ganttDropTargetUserId, setGanttDropTargetUserId] = useState<string | null>(null);
+  const ganttTooltipTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (viewMode !== "gantt") {
+      setGanttTooltip(null);
+      setHoveredGanttBar(null);
+      setGanttDropTargetUserId(null);
+    }
+  }, [viewMode]);
+
+  useEffect(() => {
+    fetch("/api/users")
+      .then((r) => r.json())
+      .then((data: AssignableUser[] | { error?: string }) => {
+        if (Array.isArray(data)) setAssignableUsers(data);
+      })
+      .catch(() => {});
+  }, []);
+
+  function getFixtureRowKey(f: Fixture, i: number): string {
+    return String(f.matchId ?? f.wyId ?? i);
+  }
+
+  /** Key per (fixture, player) per assegnazioni report/video per giocatore */
+  function assignmentKey(rowKey: string, playerId: number): string {
+    return `${rowKey}-${playerId}`;
+  }
+
+  function getAssignment(key: string): FixtureAssignment {
+    return (
+      fixtureAssignments[key] ?? {
+        reportUserId: "",
+        videoEnabled: false,
+        videoUserId: null,
+      }
+    );
+  }
+
+  function setReportUser(key: string, userId: string) {
+    setFixtureAssignments((prev) => {
+      const current = prev[key] ?? { reportUserId: "", videoEnabled: false, videoUserId: null };
+      if (userId) {
+        return { ...prev, [key]: { reportUserId: userId, videoEnabled: true, videoUserId: userId } };
+      }
+      return { ...prev, [key]: { reportUserId: "", videoEnabled: false, videoUserId: null } };
+    });
+  }
+
+  function setVideoUser(key: string, userId: string | null) {
+    setFixtureAssignments((prev) => {
+      const current = prev[key] ?? { reportUserId: "", videoEnabled: false, videoUserId: null };
+      return { ...prev, [key]: { ...current, videoUserId: userId || null } };
+    });
+  }
+
+  const selectBaseClass =
+    "w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20";
 
   const runSearch = useCallback(async (q: string) => {
-    if (!q.trim()) {
+    const trimmed = q.trim();
+    if (!trimmed || trimmed.length < MIN_SEARCH_LENGTH) {
       setPlayers([]);
       setSearchError(null);
       setSearchLoading(false);
       setDropdownOpen(false);
       return;
     }
+    const controller = new AbortController();
+    if (searchAbortRef.current) searchAbortRef.current.abort();
+    searchAbortRef.current = controller;
+
     setSearchError(null);
     setSearchLoading(true);
     try {
       const res = await fetch(
-        `/api/wyscout/players/search?q=${encodeURIComponent(q.trim())}`
+        `/api/wyscout/players/search?q=${encodeURIComponent(trimmed)}`,
+        { signal: controller.signal }
       );
+      if (controller.signal.aborted) return;
       const data = await res.json();
+      if (controller.signal.aborted) return;
       if (!res.ok) throw new Error(data.error ?? "Search failed");
       const list = Array.isArray(data.players) ? data.players : [];
       setPlayers(list);
       setDropdownOpen(true);
       if (list.length === 0) setSearchError("Nessun giocatore trovato.");
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setSearchError(err instanceof Error ? err.message : "Errore di ricerca");
       setPlayers([]);
     } finally {
-      setSearchLoading(false);
+      if (!controller.signal.aborted) setSearchLoading(false);
     }
   }, []);
 
@@ -453,7 +738,7 @@ export default function PostMatchPage() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => players.length > 0 && setDropdownOpen(true)}
-              placeholder="Cerca giocatore per nome (ricerca in tempo reale)"
+              placeholder="Cerca giocatore (min. 2 caratteri)"
               className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               autoComplete="off"
             />
@@ -598,11 +883,22 @@ export default function PostMatchPage() {
                       >
                         Calendario
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setViewMode("gantt")}
+                        className={`rounded px-3 py-1.5 text-sm font-medium ${
+                          viewMode === "gantt"
+                            ? "bg-indigo-600 text-white"
+                            : "text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        Gantt
+                      </button>
                     </div>
                     <button
                       type="button"
                       onClick={() => {
-                        const csv = fixturesToCsv(fixtures);
+                        const csv = fixturesToCsv(fixtures, fixtureAssignments, assignableUsers);
                         const base = "partite-post-match";
                         const date = new Date().toISOString().slice(0, 10);
                         downloadCsv(csv, `${base}-${date}.csv`);
@@ -629,32 +925,65 @@ export default function PostMatchPage() {
                     const canPrev = currentIndex > 0;
                     const canNext = currentIndex < monthsData.length - 1;
 
+                    async function handleExportCalendarImage() {
+                      const node = calendarExportRef.current;
+                      if (!node) return;
+                      setCalendarExporting(true);
+                      try {
+                        const { toPng } = await import("html-to-image");
+                        const dataUrl = await toPng(node, {
+                          pixelRatio: 2,
+                          backgroundColor: "#ffffff",
+                          cacheBust: true,
+                        });
+                        const a = document.createElement("a");
+                        a.href = dataUrl;
+                        a.download = `calendario-${currentMonth.monthKey}.png`;
+                        a.click();
+                      } catch (err) {
+                        console.error("Export calendar image failed:", err);
+                      } finally {
+                        setCalendarExporting(false);
+                      }
+                    }
+
                     return (
                       <div className="mt-6">
-                        <div className="flex items-center justify-between gap-4 mb-4">
+                        <div className="flex items-center gap-2 mb-4">
                           <button
                             type="button"
-                            onClick={() => setCalendarMonthKey(monthsData[currentIndex - 1].monthKey)}
-                            disabled={!canPrev}
-                            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                            aria-label="Mese precedente"
+                            onClick={handleExportCalendarImage}
+                            disabled={calendarExporting}
+                            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
                           >
-                            ← Precedente
-                          </button>
-                          <h3 className="text-lg font-semibold text-gray-900 capitalize">
-                            {currentMonth.monthLabel}
-                          </h3>
-                          <button
-                            type="button"
-                            onClick={() => setCalendarMonthKey(monthsData[currentIndex + 1].monthKey)}
-                            disabled={!canNext}
-                            className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                            aria-label="Mese successivo"
-                          >
-                            Successivo →
+                            {calendarExporting ? "Esportazione..." : "Esporta come immagine"}
                           </button>
                         </div>
-                        <section className="w-full">
+                        <div ref={calendarExportRef} className="bg-white rounded-lg border border-gray-200 p-4">
+                          <div className="flex items-center justify-between gap-4 mb-4">
+                            <button
+                              type="button"
+                              onClick={() => setCalendarMonthKey(monthsData[currentIndex - 1].monthKey)}
+                              disabled={!canPrev}
+                              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              aria-label="Mese precedente"
+                            >
+                              ← Precedente
+                            </button>
+                            <h3 className="text-lg font-semibold text-gray-900 capitalize">
+                              {currentMonth.monthLabel}
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() => setCalendarMonthKey(monthsData[currentIndex + 1].monthKey)}
+                              disabled={!canNext}
+                              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                              aria-label="Mese successivo"
+                            >
+                              Successivo →
+                            </button>
+                          </div>
+                          <section className="w-full">
                           <table className="w-full border-collapse" style={{ tableLayout: "fixed" }}>
                                 <thead>
                                   <tr>
@@ -777,7 +1106,181 @@ export default function PostMatchPage() {
                                   ))}
                                 </tbody>
                               </table>
-                        </section>
+                          </section>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {viewMode === "gantt" && (() => {
+                    const ganttTasks = buildGanttTasks(fixtures, fixtureAssignments, assignableUsers);
+                    if (ganttTasks.length === 0) {
+                      return (
+                        <div className="mt-6 text-sm text-gray-500">
+                          Nessuna assegnazione da mostrare. Assegna report o video alle partite nella tabella.
+                        </div>
+                      );
+                    }
+                    const byUser = new Map<string, GanttTask[]>();
+                    for (const t of ganttTasks) {
+                      const list = byUser.get(t.userId) ?? [];
+                      list.push(t);
+                      byUser.set(t.userId, list);
+                    }
+                    const sortedUserEntries = Array.from(byUser.entries()).sort(([, tasksA], [, tasksB]) =>
+                      (tasksA[0].userName || "").localeCompare(tasksB[0].userName || "", "it", { sensitivity: "base" })
+                    );
+                    const minTs = Math.min(...ganttTasks.map((t) => t.start.getTime()));
+                    const maxTs = Math.max(...ganttTasks.map((t) => t.end.getTime()));
+                    const rangeMs = maxTs - minTs || 1;
+                    const dayMs = 24 * 60 * 60 * 1000;
+                    const totalDays = Math.ceil(rangeMs / dayMs) || 1;
+                    const chartWidth = Math.max(600, Math.min(1400, totalDays * 24));
+                    const leftLabelWidth = 180;
+
+                    return (
+                      <div className="mt-6">
+                        <p className="text-sm text-gray-600 mb-3">
+                          Inizio = data partita · Fine = data di consegna
+                        </p>
+                        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                          <div style={{ width: leftLabelWidth + chartWidth, minWidth: "100%" }} className="flex">
+                            <div className="shrink-0 flex flex-col border-r border-gray-200 bg-gray-50/80" style={{ width: leftLabelWidth }}>
+                              <div className="h-7 flex items-center px-3 border-b border-gray-200 text-xs font-semibold uppercase text-gray-500 shrink-0">Utente</div>
+                              {sortedUserEntries.map(([userId, tasks]) => (
+                                <div
+                                  key={userId}
+                                  className="px-3 flex items-center shrink-0 text-sm font-medium text-gray-900 border-b border-gray-200 last:border-0"
+                                  style={{ height: 56 }}
+                                >
+                                  {tasks[0].userName || userId}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex-1 relative py-0 pr-2 flex flex-col" style={{ width: chartWidth }}>
+                              <div className="flex flex-col flex-1 min-h-0">
+                                <div className="flex text-xs text-gray-500 border-b border-gray-100 px-1 shrink-0 h-7 items-center">
+                                  {(() => {
+                                    const start = new Date(minTs);
+                                    const daysToShow = Math.min(31, totalDays);
+                                    const step = Math.max(1, Math.floor(daysToShow / 12));
+                                    const labels: { left: number; label: string }[] = [];
+                                    for (let d = 0; d <= totalDays; d += step) {
+                                      const t = minTs + d * dayMs;
+                                      const date = new Date(t);
+                                      labels.push({
+                                        left: (d / totalDays) * 100,
+                                        label: date.toLocaleDateString("it-IT", { day: "2-digit", month: "short" }),
+                                      });
+                                    }
+                                    return labels.map(({ left, label }) => (
+                                      <span key={label} className="absolute text-[10px]" style={{ left: `${left}%` }}>
+                                        {label}
+                                      </span>
+                                    ));
+                                  })()}
+                                </div>
+                                {sortedUserEntries.map(([userId, userTasks], rowIdx) => {
+                                  const isDropTarget = ganttDropTargetUserId === userId;
+                                  return (
+                                  <div
+                                    key={userId}
+                                    className={`flex items-center border-b border-gray-200 last:border-0 relative shrink-0 transition-colors ${isDropTarget ? "bg-blue-50" : ""}`}
+                                    style={{ height: 56, width: "100%" }}
+                                    onDragOver={(e) => {
+                                      e.preventDefault();
+                                      e.dataTransfer.dropEffect = "move";
+                                      setGanttDropTargetUserId(userId);
+                                    }}
+                                    onDragLeave={() => setGanttDropTargetUserId(null)}
+                                    onDrop={(e) => {
+                                      e.preventDefault();
+                                      setGanttDropTargetUserId(null);
+                                      const raw = e.dataTransfer.getData("application/x-gantt-assignment");
+                                      if (!raw) return;
+                                      try {
+                                        const { assignmentKey, type, userId: draggedUserId } = JSON.parse(raw) as { assignmentKey: string; type: "report" | "video"; userId?: string };
+                                        if (draggedUserId === userId) return;
+                                        if (type === "report") setReportUser(assignmentKey, userId);
+                                        else setVideoUser(assignmentKey, userId);
+                                      } catch (_) {}
+                                    }}
+                                  >
+                                    <div className="absolute inset-0 flex items-center" style={{ width: "100%" }}>
+                                      {userTasks.map((task, i) => {
+                                        const leftPct = ((task.start.getTime() - minTs) / rangeMs) * 100;
+                                        const widthPct = ((task.end.getTime() - task.start.getTime()) / rangeMs) * 100;
+                                        const isVideo = task.type === "video";
+                                        const gapPx = 4;
+                                        const tooltipText = `${task.label} · ${task.start.toLocaleDateString("it-IT")} – ${task.end.toLocaleDateString("it-IT")} (${isVideo ? "Video" : "Report"})`;
+                                        const barKey = `${userId}-${task.matchId}-${task.type}-${i}`;
+                                        const isHovered = hoveredGanttBar === barKey;
+                                        return (
+                                          <div
+                                            key={`${task.matchId}-${task.type}-${i}`}
+                                            draggable
+                                            onDragStart={(e) => {
+                                              e.dataTransfer.setData("application/x-gantt-assignment", JSON.stringify({ assignmentKey: task.assignmentKey, type: task.type, userId: task.userId }));
+                                              e.dataTransfer.effectAllowed = "move";
+                                              e.dataTransfer.setData("text/plain", task.label);
+                                            }}
+                                            className={`absolute top-1 bottom-1 rounded-md overflow-hidden flex items-center min-w-[4px] border transition-all duration-150 cursor-grab active:cursor-grabbing ${isHovered ? "z-20 shadow-lg ring-2 ring-gray-800 ring-offset-1 border-white scale-[1.02]" : "z-0 shadow-sm border-white/20"}`}
+                                            style={{
+                                              left: `calc(${leftPct}% + ${gapPx / 2}px)`,
+                                              width: `calc(${Math.max(widthPct, 2)}% - ${gapPx}px)`,
+                                              backgroundColor: isVideo ? "#ea580c" : "#2563eb",
+                                            }}
+                                            title={tooltipText}
+                                            onMouseEnter={(e) => {
+                                              setHoveredGanttBar(barKey);
+                                              if (ganttTooltipTimeoutRef.current) clearTimeout(ganttTooltipTimeoutRef.current);
+                                              ganttTooltipTimeoutRef.current = setTimeout(() => {
+                                                setGanttTooltip({
+                                                  text: tooltipText,
+                                                  x: e.clientX,
+                                                  y: e.clientY,
+                                                });
+                                              }, 120);
+                                            }}
+                                            onMouseMove={(e) => {
+                                              setGanttTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : null);
+                                            }}
+                                            onMouseLeave={() => {
+                                              setHoveredGanttBar(null);
+                                              if (ganttTooltipTimeoutRef.current) {
+                                                clearTimeout(ganttTooltipTimeoutRef.current);
+                                                ganttTooltipTimeoutRef.current = null;
+                                              }
+                                              setGanttTooltip(null);
+                                            }}
+                                            onDragEnd={() => setGanttDropTargetUserId(null)}
+                                          >
+                                            <span className="text-white text-[10px] font-medium px-1.5 truncate block">
+                                              {task.label.length > 20 ? task.label.slice(0, 18) + "…" : task.label}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 flex gap-4 text-xs text-gray-500">
+                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-600" /> Report</span>
+                          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-600" /> Video</span>
+                        </div>
+                        {ganttTooltip && (
+                          <div
+                            className="fixed z-50 pointer-events-none px-2 py-1.5 text-xs font-medium text-white bg-gray-900 rounded shadow-lg whitespace-nowrap"
+                            style={{ left: ganttTooltip.x + 10, top: ganttTooltip.y + 8 }}
+                          >
+                            {ganttTooltip.text}
+                          </div>
+                        )}
                       </div>
                     );
                   })()}
@@ -787,33 +1290,36 @@ export default function PostMatchPage() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead>
                       <tr>
-                        <th className="w-10 px-2 py-2" aria-label="Espandi" />
-                        <th className="px-2 py-2 text-left text-xs font-medium uppercase text-gray-500 w-20">
+                        <th className="w-10 px-3 py-3 text-left" aria-label="Espandi" />
+                        <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500 w-20">
                           Foto
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">
                           Giocatore
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
-                          Data
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">
+                          Data / Label
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
-                          Label
-                        </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">
                           Area / Competizione / Stagione / Round
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500">
                           Gameweek
                         </th>
-                        <th className="px-4 py-2 text-left text-xs font-medium uppercase text-gray-500">
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500 whitespace-nowrap">
                           Gameweek inizio – fine
+                        </th>
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500 whitespace-nowrap">
+                          Data di consegna
+                        </th>
+                        <th className="px-5 py-3 text-left text-xs font-medium uppercase text-gray-500 min-w-[280px]">
+                          Assegnazioni (report / video per giocatore)
                         </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {fixtures.map((f, i) => {
-                        const rowKey = f.matchId ?? f.wyId ?? i;
+                        const rowKey = getFixtureRowKey(f, i);
                         const isExpanded = expandedMatchId === (f.matchId ?? f.wyId);
                         const dateStr = f.date ?? f.dateutc ?? "";
                         const dateFormatted = dateStr
@@ -861,7 +1367,7 @@ export default function PostMatchPage() {
                         return (
                           <Fragment key={rowKey}>
                             <tr>
-                              <td className="w-10 px-2 py-2">
+                              <td className="w-10 px-3 py-3 align-middle">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -879,7 +1385,7 @@ export default function PostMatchPage() {
                                   </span>
                                 </button>
                               </td>
-                              <td className="px-2 py-2">
+                              <td className="px-4 py-3 align-middle">
                                 <div className="flex items-center gap-1 flex-wrap">
                                   {(f.playersInMatch ?? []).map((p) => {
                                     const pl = selectedPlayers.find((s) => (s.wyId ?? s.id) === (p.wyId ?? p.id)) ?? p;
@@ -906,28 +1412,110 @@ export default function PostMatchPage() {
                                   })}
                                 </div>
                               </td>
-                              <td className="px-4 py-2 text-sm text-gray-900">
+                              <td className="px-5 py-3 text-sm text-gray-900 align-middle">
                                 {(f.playerNames ?? []).join(", ")}
                               </td>
-                              <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
-                                {dateFormatted}
+                              <td className="px-5 py-3 text-sm align-middle">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="text-gray-700 text-xs whitespace-nowrap">{dateFormatted}</span>
+                                  <span className="text-gray-900 font-medium">{label}</span>
+                                </div>
                               </td>
-                              <td className="px-4 py-2 text-sm text-gray-900">
-                                {label}
-                              </td>
-                              <td className="px-4 py-2 text-sm text-gray-700">
+                              <td className="px-5 py-3 text-sm text-gray-700 align-middle">
                                 {parts.length > 0 ? parts.join(" / ") : "—"}
                               </td>
-                              <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                              <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap align-middle">
                                 {gameweek}
                               </td>
-                              <td className="px-4 py-2 text-sm text-gray-700 whitespace-nowrap">
+                              <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap align-middle">
                                 {gameweekRange}
+                              </td>
+                              <td className="px-5 py-3 text-sm text-gray-700 whitespace-nowrap align-middle">
+                                {getDeliveryDate(f)
+                                  ? new Date(getDeliveryDate(f) + "T12:00:00").toLocaleDateString("it-IT")
+                                  : "—"}
+                              </td>
+                              <td className="px-5 py-3 align-top">
+                                <div className="flex flex-col gap-2">
+                                  {(f.playersInMatch ?? []).map((p) => {
+                                    const pl = selectedPlayers.find((s) => (s.wyId ?? s.id) === (p.wyId ?? p.id)) ?? p;
+                                    const pid = pl.wyId ?? pl.id;
+                                    if (pid == null) return null;
+                                    const key = assignmentKey(rowKey, pid);
+                                    const assign = getAssignment(key);
+                                    const pImg = playerImageUrl(pl);
+                                    const playerLabel = (pl.shortName ?? ([pl.firstName, pl.lastName].filter(Boolean).join(" ") || `#${pid}`)) as string;
+                                    const hasReport = !!assign.reportUserId;
+                                    const videoValue = assign.videoUserId ?? "";
+                                    return (
+                                      <div
+                                        key={pid}
+                                        className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50/80 p-2 shadow-sm"
+                                      >
+                                        <div className="flex min-w-0 shrink-0 items-center justify-center gap-1.5">
+                                          {pImg ? (
+                                            <img
+                                              src={pImg}
+                                              alt=""
+                                              className="h-7 w-7 rounded-full object-cover ring-1 ring-gray-200"
+                                              onError={(e) => { e.currentTarget.style.display = "none"; }}
+                                            />
+                                          ) : (
+                                            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gray-200 text-[10px] font-medium text-gray-600">
+                                              {playerLabel.slice(0, 2).toUpperCase()}
+                                            </span>
+                                          )}
+                                          <span className="max-w-[80px] truncate text-xs font-medium text-gray-800" title={playerLabel}>
+                                            {playerLabel}
+                                          </span>
+                                        </div>
+                                        <div className="flex flex-1 flex-wrap items-end gap-2">
+                                          <div className="min-w-[120px] flex-1">
+                                            <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                                              Report
+                                            </label>
+                                            <select
+                                              value={assign.reportUserId}
+                                              onChange={(e) => setReportUser(key, e.target.value)}
+                                              className={selectBaseClass}
+                                            >
+                                              <option value="">—</option>
+                                              {assignableUsers.map((u) => (
+                                                <option key={u.id} value={u.id}>
+                                                  {u.full_name ?? u.email ?? u.id}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                          <div className="min-w-[100px] flex-1">
+                                            <label className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                                              Video
+                                            </label>
+                                            <select
+                                              value={videoValue}
+                                              onChange={(e) => setVideoUser(key, e.target.value || null)}
+                                              disabled={!hasReport}
+                                              className={`${selectBaseClass} ${!hasReport ? "cursor-not-allowed bg-gray-100 text-gray-500" : ""}`}
+                                              title={!hasReport ? "Seleziona prima Report" : undefined}
+                                            >
+                                              <option value="">—</option>
+                                              {assignableUsers.map((u) => (
+                                                <option key={u.id} value={u.id}>
+                                                  {u.full_name ?? u.email ?? u.id}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </td>
                             </tr>
                             {isExpanded && (
                               <tr key={`${rowKey}-detail`} className="bg-gray-50">
-                                <td colSpan={8} className="px-4 py-4">
+                                <td colSpan={9} className="px-4 py-4">
                                   <div className="text-sm text-black">
                                     <p className="mb-2 font-medium">
                                       Match del turno (
@@ -1089,7 +1677,84 @@ export default function PostMatchPage() {
                   ×
                 </button>
               </div>
-              <div className="p-4 overflow-auto text-sm text-black">
+              <div className="p-4 overflow-auto text-sm text-black space-y-4">
+                <div className="space-y-3 pb-4 border-b border-gray-200">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Assegnazioni (report / video per giocatore)</p>
+                  {(f.playersInMatch ?? []).map((p) => {
+                    const pl = selectedPlayers.find((s) => (s.wyId ?? s.id) === (p.wyId ?? p.id)) ?? p;
+                    const pid = pl.wyId ?? pl.id;
+                    if (pid == null) return null;
+                    const popupRowKey = String(f.matchId ?? f.wyId);
+                    const key = assignmentKey(popupRowKey, pid);
+                    const assign = getAssignment(key);
+                    const pImg = playerImageUrl(pl);
+                    const playerLabel = (pl.shortName ?? ([pl.firstName, pl.lastName].filter(Boolean).join(" ") || `#${pid}`)) as string;
+                    const hasReport = !!assign.reportUserId;
+                    const videoValue = assign.videoUserId ?? "";
+                    return (
+                      <div
+                        key={pid}
+                        className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50/80 p-3 shadow-sm"
+                      >
+                        <div className="flex min-w-0 shrink-0 flex-col items-center gap-1">
+                          {pImg ? (
+                            <img
+                              src={pImg}
+                              alt=""
+                              className="h-12 w-12 rounded-full object-cover ring-1 ring-gray-200"
+                              onError={(e) => { e.currentTarget.style.display = "none"; }}
+                            />
+                          ) : (
+                            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-200 text-sm font-medium text-gray-600">
+                              {playerLabel.slice(0, 2).toUpperCase()}
+                            </span>
+                          )}
+                          <span className="max-w-[140px] truncate text-sm font-medium text-gray-800" title={playerLabel}>
+                            {playerLabel}
+                          </span>
+                        </div>
+                        <div className="flex flex-1 flex-wrap items-end gap-3">
+                          <div className="min-w-[160px] flex-1">
+                            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                              Report
+                            </label>
+                            <select
+                              value={assign.reportUserId}
+                              onChange={(e) => setReportUser(key, e.target.value)}
+                              className={selectBaseClass}
+                            >
+                              <option value="">—</option>
+                              {assignableUsers.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.full_name ?? u.email ?? u.id}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="min-w-[160px] flex-1">
+                            <label className="mb-1 block text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                              Video
+                            </label>
+                            <select
+                              value={videoValue}
+                              onChange={(e) => setVideoUser(key, e.target.value || null)}
+                              disabled={!hasReport}
+                              className={`${selectBaseClass} ${!hasReport ? "cursor-not-allowed bg-gray-100 text-gray-500" : ""}`}
+                              title={!hasReport ? "Seleziona prima Report" : undefined}
+                            >
+                              <option value="">—</option>
+                              {assignableUsers.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  {u.full_name ?? u.email ?? u.id}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
                 <p className="mb-2 font-medium">Match del turno ({gameweekMatchesList.length})</p>
                 <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
                   {gameweekMatchesList.length === 0 ? (
