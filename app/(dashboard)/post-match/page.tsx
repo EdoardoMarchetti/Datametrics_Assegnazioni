@@ -1029,7 +1029,7 @@ export default function PostMatchPage() {
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    className="rounded-md border border-dm-border px-3 py-2 shadow-sm focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
+                    className="rounded-md border border-dm-border bg-dm-card px-3 py-2 text-dm-text shadow-sm focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
                   />
                 </div>
                 <div>
@@ -1040,7 +1040,7 @@ export default function PostMatchPage() {
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
-                    className="rounded-md border border-dm-border px-3 py-2 shadow-sm focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
+                    className="rounded-md border border-dm-border bg-dm-card px-3 py-2 text-dm-text shadow-sm focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
                   />
                 </div>
               </div>
@@ -1681,7 +1681,7 @@ export default function PostMatchPage() {
                                           v ? { ...prev, [rowKey]: v } : (() => { const { [rowKey]: _, ...rest } = prev; return rest; })()
                                         );
                                       }}
-                                      className="block w-full min-w-[120px] rounded border border-dm-border px-2 py-1 text-sm text-dm-text focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
+                                      className="block w-full min-w-[120px] rounded border border-dm-border bg-dm-card px-2 py-1 text-sm text-dm-text focus:border-dm-accent focus:outline-none focus:ring-1 focus:ring-dm-accent"
                                     />
                                   );
                                 })()}

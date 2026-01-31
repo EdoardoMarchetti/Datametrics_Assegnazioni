@@ -46,6 +46,15 @@
   h1, h2, h3, h4, h5, h6 {
     color: var(--dm-text);
   }
+
+  /* Date/time inputs: sfondo e testo espliciti + hint per popup nativo scuro */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    background-color: var(--dm-card);
+    color: var(--dm-text);
+    color-scheme: dark;
+  }
 }
 
 @layer components {
