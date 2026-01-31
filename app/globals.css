@@ -47,14 +47,6 @@
     color: var(--dm-text);
   }
 
-  /* Date/time inputs: sfondo e testo espliciti + hint per popup nativo scuro */
-  input[type="date"],
-  input[type="time"],
-  input[type="datetime-local"] {
-    background-color: var(--dm-card);
-    color: var(--dm-text);
-    color-scheme: dark;
-  }
 }
 
 @layer components {
@@ -81,4 +73,25 @@
     border: 1px solid var(--dm-border);
     @apply rounded-lg;
   }
+}
+
+/* Date/time inputs: fuori da layer per vincere sui default del browser */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  background-color: var(--dm-card) !important;
+  color: var(--dm-text) !important;
+  color-scheme: dark;
+}
+
+/* Chrome/Safari/Edge: il valore della data è in pseudo-elementi, va colorato esplicitamente */
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-year-field,
+input[type="time"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit {
+  color: var(--dm-text) !important;
 }
