@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { wyscoutFetch } from "@/lib/wyscout";
 
 type FixtureRecord = Record<string, unknown>;
@@ -158,17 +156,6 @@ export async function GET(
       if (result.status === "rejected") return;
       const seasonId = Array.from(seasonIds)[idx];
       const rawPayload = result.value;
-      const logDir = path.join(process.cwd(), "logs");
-      try {
-        fs.mkdirSync(logDir, { recursive: true });
-        fs.writeFileSync(
-          path.join(logDir, `season-${seasonId}-fixtures.json`),
-          JSON.stringify(rawPayload, null, 2),
-          "utf8"
-        );
-      } catch {
-        // ignore write errors
-      }
       const raw = toList(rawPayload);
       const matches = raw
         .map(toMatchRecord)

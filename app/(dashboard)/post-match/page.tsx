@@ -358,6 +358,196 @@ function downloadCsv(csv: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+/** Parse a single CSV line respecting quoted fields ("" = escaped quote) */
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] === '"') {
+      let cell = "";
+      i++;
+      while (i < line.length) {
+        if (line[i] === '"') {
+          i++;
+          if (line[i] === '"') {
+            cell += '"';
+            i++;
+          } else break;
+        } else {
+          cell += line[i];
+          i++;
+        }
+      }
+      out.push(cell);
+      if (line[i] === ",") i++;
+    } else {
+      let cell = "";
+      while (i < line.length && line[i] !== ",") {
+        cell += line[i];
+        i++;
+      }
+      out.push(cell.trim());
+      if (line[i] === ",") i++;
+    }
+  }
+  return out;
+}
+
+/** Italian date "d/m/yyyy" or "dd/mm/yyyy" to YYYY-MM-DD */
+function parseItDateToIso(s: string): string {
+  const t = s.trim();
+  if (!t) return "";
+  const parts = t.split(/[/.-]/).map((p) => p.trim());
+  if (parts.length < 3) return "";
+  const day = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const year = parseInt(parts[2], 10);
+  if (Number.isNaN(day) || Number.isNaN(month) || Number.isNaN(year)) return "";
+  const d = new Date(year, month, day);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 10);
+}
+
+type CsvLoadResult = {
+  fixtures: Fixture[];
+  fixtureAssignments: Record<string, FixtureAssignment>;
+  deliveryDateOverrides: Record<string, string>;
+  error?: string;
+};
+
+function csvToFixturesAndAssignments(
+  csvText: string,
+  assignableUsers: AssignableUser[]
+): CsvLoadResult {
+  const text = csvText.replace(/^\uFEFF/, "").trim();
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) {
+    return { fixtures: [], fixtureAssignments: {}, deliveryDateOverrides: {}, error: "CSV vuoto o solo intestazione." };
+  }
+  const headerRow = parseCsvLine(lines[0]);
+  const col = (name: string) => {
+    const i = headerRow.findIndex((h) => h.trim().toLowerCase() === name.toLowerCase());
+    return i >= 0 ? i : -1;
+  };
+  const idxGiocatore = col("Giocatore");
+  const idxData = col("Data");
+  const idxLabel = col("Label");
+  const idxGameweek = col("Gameweek");
+  const idxGwStart = col("Gameweek inizio");
+  const idxGwEnd = col("Gameweek fine");
+  const idxDelivery = col("Data di consegna");
+  const idxMatchId = col("Match ID");
+  if (idxData < 0 || idxLabel < 0 || idxMatchId < 0) {
+    return {
+      fixtures: [],
+      fixtureAssignments: {},
+      deliveryDateOverrides: {},
+      error: "Colonne obbligatorie mancanti (Data, Label, Match ID).",
+    };
+  }
+  const fixedCols = 9;
+  const userHeaderStart = Math.max(idxMatchId + 1, fixedCols);
+  const userDisplayToId = (display: string): string | null => {
+    const d = (display ?? "").trim();
+    if (!d) return null;
+    const u = assignableUsers.find(
+      (x) =>
+        (x.full_name && x.full_name.trim() === d) ||
+        (x.email && x.email.trim() === d) ||
+        x.id === d
+    );
+    return u ? u.id : null;
+  };
+  const userIdsByCol: (string | null)[] = [];
+  for (let c = userHeaderStart; c < headerRow.length; c++) {
+    const name = headerRow[c]?.trim() ?? "";
+    userIdsByCol.push(userDisplayToId(name) ?? null);
+  }
+
+  const byMatchId = new Map<
+    number,
+    Fixture & { playersInMatch: Player[]; playerNames?: string[] }
+  >();
+  const assignments: Record<string, FixtureAssignment> = {};
+  const deliveryOverrides: Record<string, string> = {};
+
+  for (let r = 1; r < lines.length; r++) {
+    const cells = parseCsvLine(lines[r]);
+    const get = (i: number) => (i >= 0 && i < cells.length ? cells[i].trim() : "");
+    const matchIdStr = get(idxMatchId);
+    const matchId = matchIdStr ? parseInt(matchIdStr, 10) : NaN;
+    if (Number.isNaN(matchId)) continue;
+    const dateStr = get(idxData);
+    const dateIso = parseItDateToIso(dateStr) || undefined;
+    const label = get(idxLabel);
+    const gameweekStr = get(idxGameweek);
+    const gameweek = gameweekStr ? parseInt(gameweekStr, 10) : undefined;
+    const gwStart = get(idxGwStart);
+    const gwEnd = get(idxGwEnd);
+    const deliveryStr = get(idxDelivery);
+    const rowKey = String(matchId);
+    if (deliveryStr) {
+      const iso = parseItDateToIso(deliveryStr);
+      if (iso) deliveryOverrides[rowKey] = iso;
+    }
+
+    let fixture = byMatchId.get(matchId);
+    if (!fixture) {
+      fixture = {
+        matchId,
+        wyId: matchId,
+        date: dateIso ? `${dateIso}T12:00:00` : undefined,
+        dateutc: dateIso ? `${dateIso}T12:00:00` : undefined,
+        label: label || `Match ${matchId}`,
+        gameweek,
+        gameweekStartDate: parseItDateToIso(gwStart) || undefined,
+        gameweekEndDate: parseItDateToIso(gwEnd) || undefined,
+        playersInMatch: [],
+      };
+      byMatchId.set(matchId, fixture);
+    }
+
+    const playerLabel = get(idxGiocatore);
+    const hasPlayer = playerLabel.length > 0;
+    let assignmentKey = rowKey;
+    let player: Player | undefined;
+    if (hasPlayer) {
+      const syntheticId = Math.abs((matchId * 31 + playerLabel.length + r) % 2147483647);
+      player = { id: syntheticId, wyId: syntheticId, shortName: playerLabel };
+      fixture.playersInMatch!.push(player);
+      assignmentKey = `${rowKey}-${syntheticId}`;
+    }
+
+    let reportUserId = "";
+    let videoUserId: string | null = null;
+    for (let c = 0; c < userIdsByCol.length; c++) {
+      const uid = userIdsByCol[c];
+      if (!uid) continue;
+      const cell = c + userHeaderStart < cells.length ? cells[c + userHeaderStart].trim().toLowerCase() : "";
+      if (cell === "report") {
+        reportUserId = uid;
+      } else if (cell === "video") {
+        videoUserId = uid;
+      }
+    }
+    if (reportUserId || videoUserId) {
+      assignments[assignmentKey] = {
+        reportUserId: reportUserId || "",
+        videoEnabled: !!videoUserId,
+        videoUserId,
+      };
+    }
+  }
+
+  const fixtures = Array.from(byMatchId.values()).sort((a, b) => {
+    const da = new Date(a.date ?? a.dateutc ?? 0).getTime();
+    const db = new Date(b.date ?? b.dateutc ?? 0).getTime();
+    return da - db;
+  });
+
+  return { fixtures, fixtureAssignments: assignments, deliveryDateOverrides: deliveryOverrides };
+}
+
 /** YYYY-MM-DD in local time (so calendar day matches user timezone) */
 function toLocalDateKey(d: Date): string {
   if (Number.isNaN(d.getTime())) return "";
@@ -502,6 +692,7 @@ export default function PostMatchPage() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const calendarExportRef = useRef<HTMLDivElement>(null);
   const searchAbortRef = useRef<AbortController | null>(null);
+  const csvFileInputRef = useRef<HTMLInputElement>(null);
   const [calendarExporting, setCalendarExporting] = useState(false);
   const [ganttTooltip, setGanttTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [hoveredGanttBar, setHoveredGanttBar] = useState<string | null>(null);
@@ -907,6 +1098,41 @@ export default function PostMatchPage() {
                         Gantt
                       </button>
                     </div>
+                    <input
+                      ref={csvFileInputRef}
+                      type="file"
+                      accept=".csv,text/csv,application/csv,text/plain,*/*"
+                      className="hidden"
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          const text = String(reader.result ?? "");
+                          const result = csvToFixturesAndAssignments(text, assignableUsers);
+                          if (result.error) {
+                            setFixturesError(result.error);
+                            setFixtures([]);
+                            setFixtureAssignments({});
+                            setDeliveryDateOverrides({});
+                          } else {
+                            setFixtures(result.fixtures);
+                            setFixtureAssignments(result.fixtureAssignments);
+                            setDeliveryDateOverrides(result.deliveryDateOverrides);
+                            setFixturesError(null);
+                          }
+                        };
+                        reader.readAsText(file, "UTF-8");
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => csvFileInputRef.current?.click()}
+                      className="rounded-md border border-dm-border bg-dm-card px-4 py-2 text-sm font-medium text-dm-text shadow-sm hover:bg-dm-surface"
+                    >
+                      Carica CSV
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
