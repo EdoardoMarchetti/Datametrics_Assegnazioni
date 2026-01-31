@@ -24,20 +24,6 @@ export async function wyscoutFetch<T = unknown>(
   }
 
   const auth = Buffer.from(`${username}:${password}`).toString("base64");
-  // #region agent log
-  fetch("http://127.0.0.1:7243/ingest/b739254f-bde5-4543-b9f5-ea67cd2323cb", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: "lib/wyscout.ts:wyscoutFetch",
-      message: "Wyscout request",
-      data: { url: url.toString(), version, path, paramKeys: params ? Object.keys(params) : [] },
-      timestamp: Date.now(),
-      sessionId: "debug-session",
-      hypothesisId: "B",
-    }),
-  }).catch(() => {});
-  // #endregion
   const res = await fetch(url.toString(), {
     headers: {
       Authorization: `Basic ${auth}`,
@@ -46,32 +32,6 @@ export async function wyscoutFetch<T = unknown>(
   });
 
   const resText = await res.text();
-  // #region agent log
-  fetch("http://127.0.0.1:7243/ingest/b739254f-bde5-4543-b9f5-ea67cd2323cb", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: "lib/wyscout.ts:afterFetch",
-      message: "Wyscout response",
-      data: {
-        status: res.status,
-        ok: res.ok,
-        bodyKeys: (() => {
-          try {
-            const j = JSON.parse(resText);
-            return Array.isArray(j) ? "array" : Object.keys(j);
-          } catch {
-            return "parseError";
-          }
-        })(),
-        bodySample: resText.slice(0, 300),
-      },
-      timestamp: Date.now(),
-      sessionId: "debug-session",
-      hypothesisId: "A,C,D",
-    }),
-  }).catch(() => {});
-  // #endregion
 
   if (!res.ok) {
     throw new Error(`Wyscout API error ${res.status}: ${resText}`);
